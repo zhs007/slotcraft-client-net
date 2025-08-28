@@ -48,3 +48,13 @@
 ├── tsconfig.json
 └── jest.config.js
 ```
+
+## 6. 示例 (Examples)
+
+为了方便开发者理解和快速上手，项目在 `examples/` 目录下提供了一些可以直接运行的示例脚本。
+
+- **`examples/example001.ts`**:
+  - **功能**: 演示了完整的客户端生命周期：连接服务器、版本校验、登录、进入游戏、执行操作（Spin），并最终断开连接。
+  - **配置**: 通过根目录的 `.env` 文件进行配置（`WEBSOCKET_URL`, `TOKEN`, `GAME_CODE`）。
+  - **协议日志**: 该示例最重要的功能之一是它会将所有与服务器的上下行通信记录到 `msg001.txt` 文件中。这份日志可以作为开发和调试，乃至实现 Mock Server 的重要依据。
+  - **运行**: `npx ts-node examples/example001.ts`
