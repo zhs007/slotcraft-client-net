@@ -22,7 +22,6 @@ export class Connection {
     this.url = url;
   }
 
-
   /**
    * Initiates the WebSocket connection.
    */

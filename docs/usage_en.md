@@ -15,7 +15,8 @@ This is a lightweight and reliable frontend network library for WebSocket commun
 ```bash
 npm install <package-name>
 ```
-*(Note: `<package-name>` will be determined when publishing to npm)*
+
+_(Note: `<package-name>` will be determined when publishing to npm)_
 
 ## Quick Start
 
@@ -39,11 +40,12 @@ client.on('ready', () => {
   console.log('Client is ready to play!');
 
   // Send a game command
-  client.send('spin', { bet: 100 })
-    .then(response => {
+  client
+    .send('spin', { bet: 100 })
+    .then((response) => {
       console.log('Spin result:', response);
     })
-    .catch(error => {
+    .catch((error) => {
       console.error('Spin failed:', error);
     });
 });
@@ -83,8 +85,8 @@ Creates a new client instance.
   - `url: string`: **Required**. The WebSocket server URL.
   - `token: string`: **Required**. The user's authentication token.
   - `gamecode: string`: **Required**. The game code to enter.
-  - `maxReconnectAttempts?: number`: *Optional*. The maximum number of reconnect attempts (default: 10).
-  - `reconnectDelay?: number`: *Optional*. The initial reconnection delay in milliseconds (default: 1000). The delay increases exponentially.
+  - `maxReconnectAttempts?: number`: _Optional_. The maximum number of reconnect attempts (default: 10).
+  - `reconnectDelay?: number`: _Optional_. The initial reconnection delay in milliseconds (default: 1000). The delay increases exponentially.
 
 ### `client.connect(): Promise<void>`
 

@@ -117,7 +117,13 @@
   - 必填：`nativever` `scriptver` `clienttype` `businessid`
   - 请求示例：
     ```json
-    {"cmdid":"checkver","nativever":1710120,"scriptver":1712260,"clienttype":"web","businessid":"demo"}
+    {
+      "cmdid": "checkver",
+      "nativever": 1710120,
+      "scriptver": 1712260,
+      "clienttype": "web",
+      "businessid": "demo"
+    }
     ```
   - 成功：`verinfo { isok:true }` + `cmdret{isok:true}`
   - 失败：`noticemsg2{ msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
@@ -172,18 +178,18 @@
 
 ## 典型接入时序
 
-1) 连接 WebSocket 成功
-2) 版本校验：`checkver`
-3) 登录：`flblogin` 或 `guestlogin`
+1. 连接 WebSocket 成功
+2. 版本校验：`checkver`
+3. 登录：`flblogin` 或 `guestlogin`
    - 服务端推送：`timesync`、`gamecodeinfo`、`userbaseinfo`、（可能）`commonjackpot`
-4) 进入游戏：`comeingame3`
+4. 进入游戏：`comeingame3`
    - 推送：`gameuserinfo`（含首个 `ctrlid`）、（可能）`giftfreeinfo`、`commonjackpot`
    - 推送：`gamecfg`
-5) 进行游戏：循环发 `gamectrl3`
+5. 进行游戏：循环发 `gamectrl3`
    - 每次通常推送：`userbaseinfo`、`gameuserinfo`；并返回 `cmdret`
-6) 其他：根据需要调用 `reqcommonjackpot`、`usegiftfree`、`collect`、`getfreecash` 等
-7) 心跳：定期发 `keepalive`，建议 20~30 秒一次
-8) 退出：`logout` 或直接断开
+6. 其他：根据需要调用 `reqcommonjackpot`、`usegiftfree`、`collect`、`getfreecash` 等
+7. 心跳：定期发 `keepalive`，建议 20~30 秒一次
+8. 退出：`logout` 或直接断开
 
 ## ctrlid 安全说明
 
@@ -195,11 +201,17 @@
 
 - 进入游戏：
   ```json
-  {"cmdid":"comeingame3","gamecode":"game-default","tableid":"t1","isreconnect":false}
+  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "t1", "isreconnect": false }
   ```
 - 一次 spin：
   ```json
-  {"cmdid":"gamectrl3","gameid":101,"ctrlid":123456789,"ctrlname":"spin","ctrlparam":{"bet":1,"lines":10,"times":1}}
+  {
+    "cmdid": "gamectrl3",
+    "gameid": 101,
+    "ctrlid": 123456789,
+    "ctrlname": "spin",
+    "ctrlparam": { "bet": 1, "lines": 10, "times": 1 }
+  }
   ```
 
 ## 其他注意事项

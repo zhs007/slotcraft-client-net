@@ -1,13 +1,14 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Connection } from '../src/connection';
 
 // Manual store for mock instances because jest's `mock.instances` seems unreliable here.
 let mockInstances: any[] = [];
 
 // Mock the global WebSocket class.
-const mockWebSocket = jest.fn().mockImplementation(() => {
+const mockWebSocket = vi.fn().mockImplementation(() => {
   const instance = {
-    send: jest.fn(),
-    close: jest.fn(),
+  send: vi.fn(),
+  close: vi.fn(),
     readyState: WebSocket.OPEN as number,
     // Event handlers should be properties that can be assigned to.
     onopen: null as ((ev: Event) => any) | null,
@@ -80,7 +81,7 @@ describe('Connection', () => {
   });
 
   it('should trigger onOpen callback', () => {
-    const onOpen = jest.fn();
+  const onOpen = vi.fn();
     connection.onOpen = onOpen;
     connection.connect();
     const instance = getMockInstance();
@@ -91,7 +92,7 @@ describe('Connection', () => {
   });
 
   it('should trigger onClose callback', () => {
-    const onClose = jest.fn();
+  const onClose = vi.fn();
     connection.onClose = onClose;
     connection.connect();
     const instance = getMockInstance();
@@ -102,7 +103,7 @@ describe('Connection', () => {
   });
 
   it('should trigger onMessage callback', () => {
-    const onMessage = jest.fn();
+  const onMessage = vi.fn();
     connection.onMessage = onMessage;
     connection.connect();
     const instance = getMockInstance();
@@ -113,7 +114,7 @@ describe('Connection', () => {
   });
 
   it('should trigger onError callback', () => {
-    const onError = jest.fn();
+  const onError = vi.fn();
     connection.onError = onError;
     connection.connect();
     const instance = getMockInstance();

@@ -117,7 +117,13 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
   - Required: `nativever`, `scriptver`, `clienttype`, `businessid`
   - Example:
     ```json
-    {"cmdid":"checkver","nativever":1710120,"scriptver":1712260,"clienttype":"web","businessid":"demo"}
+    {
+      "cmdid": "checkver",
+      "nativever": 1710120,
+      "scriptver": 1712260,
+      "clienttype": "web",
+      "businessid": "demo"
+    }
     ```
   - Success: `verinfo { isok:true }` + `cmdret{isok:true}`
   - Failure: `noticemsg2 { msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
@@ -170,18 +176,18 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
 
 ## Typical sequence
 
-1) Establish WebSocket connection
-2) Version check: `checkver`
-3) Login: `flblogin` or `guestlogin`
+1. Establish WebSocket connection
+2. Version check: `checkver`
+3. Login: `flblogin` or `guestlogin`
    - Server pushes: `timesync`, `gamecodeinfo`, `userbaseinfo`, (maybe) `commonjackpot`
-4) Enter game: `comeingame3`
+4. Enter game: `comeingame3`
    - Pushes: `gameuserinfo` (with first `ctrlid`), (maybe) `giftfreeinfo`, `commonjackpot`
    - Pushes: `gamecfg`
-5) Play loop: send `gamectrl3` repeatedly
+5. Play loop: send `gamectrl3` repeatedly
    - Typically pushes: `userbaseinfo`, `gameuserinfo`; then `cmdret`
-6) Other operations: `reqcommonjackpot`, `usegiftfree`, `collect`, `getfreecash`
-7) Heartbeat: send `keepalive` every 20–30s
-8) Exit: `logout` or disconnect
+6. Other operations: `reqcommonjackpot`, `usegiftfree`, `collect`, `getfreecash`
+7. Heartbeat: send `keepalive` every 20–30s
+8. Exit: `logout` or disconnect
 
 ## ctrlid safety
 
@@ -193,11 +199,17 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
 
 - Enter a game:
   ```json
-  {"cmdid":"comeingame3","gamecode":"game-default","tableid":"t1","isreconnect":false}
+  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "t1", "isreconnect": false }
   ```
 - One spin:
   ```json
-  {"cmdid":"gamectrl3","gameid":101,"ctrlid":123456789,"ctrlname":"spin","ctrlparam":{"bet":1,"lines":10,"times":1}}
+  {
+    "cmdid": "gamectrl3",
+    "gameid": 101,
+    "ctrlid": 123456789,
+    "ctrlname": "spin",
+    "ctrlparam": { "bet": 1, "lines": 10, "times": 1 }
+  }
   ```
 
 ## Notes

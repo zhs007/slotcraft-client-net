@@ -15,7 +15,8 @@
 ```bash
 npm install <package-name>
 ```
-*(注意: `<package-name>` 需要在发布到 npm 时确定)*
+
+_(注意: `<package-name>` 需要在发布到 npm 时确定)_
 
 ## 快速上手
 
@@ -39,11 +40,12 @@ client.on('ready', () => {
   console.log('客户端已就绪，可以开始游戏!');
 
   // 发送游戏指令
-  client.send('spin', { bet: 100 })
-    .then(response => {
+  client
+    .send('spin', { bet: 100 })
+    .then((response) => {
       console.log('Spin 结果:', response);
     })
-    .catch(error => {
+    .catch((error) => {
       console.error('Spin 失败:', error);
     });
 });
@@ -83,8 +85,8 @@ main();
   - `url: string`: **必需**, WebSocket 服务器地址。
   - `token: string`: **必需**, 用户认证 token。
   - `gamecode: string`: **必需**, 要进入的游戏代码。
-  - `maxReconnectAttempts?: number`: *可选*, 最大重连次数 (默认: 10)。
-  - `reconnectDelay?: number`: *可选*, 初始重连延迟（毫秒, 默认: 1000），后续延迟会以指数形式增加。
+  - `maxReconnectAttempts?: number`: _可选_, 最大重连次数 (默认: 10)。
+  - `reconnectDelay?: number`: _可选_, 初始重连延迟（毫秒, 默认: 1000），后续延迟会以指数形式增加。
 
 ### `client.connect(): Promise<void>`
 

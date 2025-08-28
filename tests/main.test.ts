@@ -1,13 +1,14 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { NetworkClient } from '../src/main';
 import { Connection } from '../src/connection';
 import { ConnectionState, NetworkClientOptions } from '../src/types';
 
-jest.mock('../src/connection');
-jest.useFakeTimers();
+vi.mock('../src/connection');
+vi.useFakeTimers();
 
 describe('NetworkClient', () => {
   let client: NetworkClient;
-  let mockConnection: jest.Mocked<Connection>;
+  let mockConnection: any;
   const options: NetworkClientOptions = {
     url: 'ws://test.com',
     token: 'test-token',
@@ -16,18 +17,22 @@ describe('NetworkClient', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.clearAllTimers();
+  vi.clearAllMocks();
+  vi.clearAllTimers();
     client = new NetworkClient(options);
-    mockConnection = (Connection as jest.Mock).mock.instances[0];
+  mockConnection = (Connection as any).mock.instances[0];
   });
 
   // Helper to get client into IN_GAME state
   const bringToInGameState = async () => {
     const connectPromise = client.connect();
     mockConnection.onOpen?.();
-    mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'login', errno: 0, data: {} }) } as MessageEvent);
-    mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'enter_game', errno: 0, data: {} }) } as MessageEvent);
+    mockConnection.onMessage?.({
+      data: JSON.stringify({ cmd: 'login', errno: 0, data: {} }),
+    } as MessageEvent);
+    mockConnection.onMessage?.({
+      data: JSON.stringify({ cmd: 'enter_game', errno: 0, data: {} }),
+    } as MessageEvent);
     await connectPromise;
   };
 
@@ -44,7 +49,11 @@ describe('NetworkClient', () => {
     it('should reject if connection closes', async () => {
       const connectPromise = client.connect();
       mockConnection.onOpen?.();
-      mockConnection.onClose?.({ code: 1006, reason: 'Abnormal closure', wasClean: true } as CloseEvent);
+      mockConnection.onClose?.({
+        code: 1006,
+        reason: 'Abnormal closure',
+        wasClean: true,
+      } as CloseEvent);
       await expect(connectPromise).rejects.toThrow('Disconnected: Abnormal closure');
     });
   });
@@ -56,14 +65,16 @@ describe('NetworkClient', () => {
 
     it('should send a message and resolve with the response', async () => {
       const sendPromise = client.send('test_cmd');
-      mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'test_cmd', ctrlid: 3, data: { success: true } }) } as MessageEvent);
+      mockConnection.onMessage?.({
+        data: JSON.stringify({ cmd: 'test_cmd', ctrlid: 3, data: { success: true } }),
+      } as MessageEvent);
       await expect(sendPromise).resolves.toEqual({ success: true });
     });
   });
 
   describe('events', () => {
     it('should emit "disconnect" with payload', () => {
-      const listener = jest.fn();
+      const listener = vi.fn();
       client.on('disconnect', listener);
       client.connect().catch(() => {});
       const closeEvent = { code: 1000, reason: 'Normal', wasClean: true } as CloseEvent;
@@ -73,12 +84,12 @@ describe('NetworkClient', () => {
   });
 
   describe('resilience: reconnection and caching', () => {
-    let setTimeoutSpy: jest.SpyInstance;
+  let setTimeoutSpy: any;
 
     beforeEach(async () => {
       await bringToInGameState();
-      jest.spyOn(console, 'log').mockImplementation(() => {}); // Suppress console.log
-      setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+  vi.spyOn(console, 'log').mockImplementation(() => {}); // Suppress console.log
+  setTimeoutSpy = vi.spyOn(global, 'setTimeout');
     });
 
     afterEach(() => {
@@ -97,8 +108,8 @@ describe('NetworkClient', () => {
       expect(client.getState()).toBe(ConnectionState.RECONNECTING);
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 100); // 100 * 2^0
 
-      // First reconnect attempt fails
-      jest.advanceTimersByTime(100);
+  // First reconnect attempt fails
+  vi.advanceTimersByTime(100);
       expect(mockConnection.connect).toHaveBeenCalledTimes(2); // Initial connect + 1st reconnect
       mockConnection.onClose?.({ wasClean: false } as CloseEvent);
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 200); // 100 * 2^1
@@ -114,32 +125,40 @@ describe('NetworkClient', () => {
       expect(mockConnection.send).not.toHaveBeenCalledWith(expect.stringContaining('queued_cmd'));
 
       // 3. Simulate successful reconnection
-      jest.advanceTimersByTime(100); // Trigger reconnect attempt
+  vi.advanceTimersByTime(100); // Trigger reconnect attempt
       mockConnection.onOpen?.();
-      mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'login', errno: 0, data: {} }) } as MessageEvent);
-      mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'enter_game', errno: 0, data: {} }) } as MessageEvent);
+      mockConnection.onMessage?.({
+        data: JSON.stringify({ cmd: 'login', errno: 0, data: {} }),
+      } as MessageEvent);
+      mockConnection.onMessage?.({
+        data: JSON.stringify({ cmd: 'enter_game', errno: 0, data: {} }),
+      } as MessageEvent);
 
       // 4. Verify queued message is now sent (ctrlid: 1,2 for initial, 3 for queued)
-      expect(mockConnection.send).toHaveBeenCalledWith(expect.stringContaining('"cmd":"queued_cmd"'));
+      expect(mockConnection.send).toHaveBeenCalledWith(
+        expect.stringContaining('"cmd":"queued_cmd"')
+      );
 
       // 5. Verify the original promise resolves
       const responseData = { status: 'ok' };
       // After initial connect (1,2) and reconnect (3,4), the queued command will have ctrlid 5.
-      mockConnection.onMessage?.({ data: JSON.stringify({ cmd: 'queued_cmd', ctrlid: 5, data: responseData }) } as MessageEvent);
+      mockConnection.onMessage?.({
+        data: JSON.stringify({ cmd: 'queued_cmd', ctrlid: 5, data: responseData }),
+      } as MessageEvent);
       await expect(sendPromise).resolves.toEqual(responseData);
     });
 
     it('should reject queued requests if reconnection ultimately fails', async () => {
       const newOptions = { ...options, maxReconnectAttempts: 1 };
-      client = new NetworkClient(newOptions);
-      mockConnection = (Connection as jest.Mock).mock.instances[1];
+  client = new NetworkClient(newOptions);
+  mockConnection = (Connection as any).mock.instances[1];
       await bringToInGameState();
 
       mockConnection.onClose?.({ wasClean: false } as CloseEvent);
       const sendPromise = client.send('will_fail');
 
       // Fail the only reconnect attempt
-      jest.advanceTimersByTime(100);
+  vi.advanceTimersByTime(100);
       mockConnection.onClose?.({ wasClean: false } as CloseEvent);
 
       await expect(sendPromise).rejects.toThrow('Reconnection failed.');
@@ -154,7 +173,7 @@ describe('NetworkClient', () => {
     });
 
     it('should handle errors from the connection', () => {
-      const errorListener = jest.fn();
+  const errorListener = vi.fn();
       client.on('error', errorListener);
       client.connect().catch(() => {});
 

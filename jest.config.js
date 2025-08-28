@@ -9,4 +9,12 @@ module.exports = {
     'src/**/*.ts',
     '!src/types.ts', // Exclude type definition files from coverage
   ],
+  coverageThreshold: {
+    global: {
+      lines: 80,
+      statements: 80,
+      functions: 80,
+      branches: 70,
+    },
+  },
 };

@@ -25,16 +25,19 @@ This project is a TypeScript-based networking library for a frontend application
 Before submitting your changes, you **must** run the following commands and ensure they all pass without errors.
 
 1.  **Install Dependencies**:
+
     ```bash
     npm install
     ```
 
 2.  **Run All Tests**: This command executes all unit and integration tests.
+
     ```bash
     npm test
     ```
 
 3.  **Check Test Coverage**: This command runs tests and generates a coverage report. Ensure your changes are well-covered and that the overall coverage does not drop below 90%.
+
     ```bash
     npm run test:coverage
     ```
@@ -54,4 +57,4 @@ You can run all verification steps using a single command defined in `package.js
 npm run check
 ```
 
-*(Note: The `check` script will be configured in `package.json` to execute the commands listed above).*
+_(Note: The `check` script will be configured in `package.json` to execute the commands listed above)._

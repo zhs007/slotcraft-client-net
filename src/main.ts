@@ -25,13 +25,13 @@ export class NetworkClient {
   private connection: Connection;
   private state: ConnectionState = ConnectionState.IDLE;
   private userInfo: Partial<UserInfo> = { ctrlid: 0 };
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
   private pendingRequests = new Map<number, PendingRequest>();
   private requestQueue: QueuedRequest[] = [];
 
   private reconnectAttempts = 0;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private connectPromise: {
     resolve: () => void;
@@ -95,9 +95,15 @@ export class NetworkClient {
     });
   }
 
-  public on(event: string, callback: (...args: any[]) => void) { this.emitter.on(event, callback); }
-  public off(event: string, callback: (...args: any[]) => void) { this.emitter.off(event, callback); }
-  public once(event: string, callback: (...args: any[]) => void) { this.emitter.once(event, callback); }
+  public on(event: string, callback: (...args: any[]) => void) {
+    this.emitter.on(event, callback);
+  }
+  public off(event: string, callback: (...args: any[]) => void) {
+    this.emitter.off(event, callback);
+  }
+  public once(event: string, callback: (...args: any[]) => void) {
+    this.emitter.once(event, callback);
+  }
 
   // --- Private Handlers ---
 
@@ -130,7 +136,11 @@ export class NetworkClient {
 
       if (message.ctrlid && this.pendingRequests.has(message.ctrlid)) {
         const promise = this.pendingRequests.get(message.ctrlid)!;
-        if (message.errno) { promise.reject(message); } else { promise.resolve(message.data); }
+        if (message.errno) {
+          promise.reject(message);
+        } else {
+          promise.resolve(message.data);
+        }
         this.pendingRequests.delete(message.ctrlid);
         return;
       }
@@ -214,11 +224,14 @@ export class NetworkClient {
     const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
 
-    this.reconnectTimeout = setTimeout(() => {
-      console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
-      // We call the connection's connect method directly to avoid creating a new public promise
-      this.connection.connect();
-    }, Math.min(delay, 30000)); // Cap delay at 30s
+    this.reconnectTimeout = setTimeout(
+      () => {
+        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+        // We call the connection's connect method directly to avoid creating a new public promise
+        this.connection.connect();
+      },
+      Math.min(delay, 30000)
+    ); // Cap delay at 30s
   }
 
   private clearReconnectTimer(): void {
@@ -230,7 +243,9 @@ export class NetworkClient {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(() => { this._send('keepalive'); }, 30000);
+    this.heartbeatInterval = setInterval(() => {
+      this._send('keepalive');
+    }, 30000);
   }
 
   private stopHeartbeat(): void {
@@ -256,9 +271,7 @@ export class NetworkClient {
     this.requestQueue = [];
     console.log(`Processing ${queue.length} queued requests...`);
     for (const req of queue) {
-      this.send(req.cmd, req.data)
-        .then(req.resolve)
-        .catch(req.reject);
+      this.send(req.cmd, req.data).then(req.resolve).catch(req.reject);
     }
   }
 }

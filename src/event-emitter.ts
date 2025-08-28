@@ -28,9 +28,7 @@ export class EventEmitter {
     if (!this.listeners[event]) {
       return;
     }
-    this.listeners[event] = this.listeners[event].filter(
-      (listener) => listener !== callback
-    );
+    this.listeners[event] = this.listeners[event].filter((listener) => listener !== callback);
   }
 
   /**
