@@ -9,7 +9,7 @@ describe('EventEmitter', () => {
   });
 
   it('should subscribe to an event and emit it', () => {
-  const listener = vi.fn();
+    const listener = vi.fn();
     emitter.on('test-event', listener);
     emitter.emit('test-event', 1, 'hello');
 
@@ -18,8 +18,8 @@ describe('EventEmitter', () => {
   });
 
   it('should call multiple listeners for the same event', () => {
-  const listener1 = vi.fn();
-  const listener2 = vi.fn();
+    const listener1 = vi.fn();
+    const listener2 = vi.fn();
     emitter.on('test-event', listener1);
     emitter.on('test-event', listener2);
     emitter.emit('test-event');
@@ -29,7 +29,7 @@ describe('EventEmitter', () => {
   });
 
   it('should unsubscribe from an event', () => {
-  const listener = vi.fn();
+    const listener = vi.fn();
     emitter.on('test-event', listener);
     emitter.off('test-event', listener);
     emitter.emit('test-event');
@@ -38,13 +38,13 @@ describe('EventEmitter', () => {
   });
 
   it('should not fail when unsubscribing a non-existent listener', () => {
-  const listener = vi.fn();
+    const listener = vi.fn();
     emitter.off('test-event', listener);
     // No error should be thrown
   });
 
   it('should handle subscribing once to an event', () => {
-  const listener = vi.fn();
+    const listener = vi.fn();
     emitter.once('test-event', listener);
 
     emitter.emit('test-event', 'first call');
@@ -61,8 +61,8 @@ describe('EventEmitter', () => {
     // A more robust implementation might return the wrapper, but for now, we test the behavior.
 
     // Let's test by adding another listener to see if `off` works selectively.
-  const onceListener = vi.fn();
-  const regularListener = vi.fn();
+    const onceListener = vi.fn();
+    const regularListener = vi.fn();
 
     emitter.once('test-event', onceListener);
     emitter.on('test-event', regularListener);
