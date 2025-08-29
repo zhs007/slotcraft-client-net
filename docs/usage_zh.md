@@ -21,7 +21,7 @@ _(注意: `<package-name>` 需要在发布到 npm 时确定)_
 ## 快速上手
 
 ```typescript
-import { NetworkClient } from '<package-name>';
+import { SlotcraftClient } from '<package-name>';
 
 const options = {
   url: 'ws://your-server.com/ws',
@@ -29,7 +29,7 @@ const options = {
   gamecode: 'game-101',
 };
 
-const client = new NetworkClient(options);
+const client = new SlotcraftClient(options);
 
 // 监听事件
 client.on('connect', () => {
@@ -77,11 +77,11 @@ main();
 
 ## API 参考
 
-### `new NetworkClient(options)`
+### `new SlotcraftClient(options)`
 
 创建客户端实例。
 
-- `options`: `NetworkClientOptions` 对象
+- `options`: `SlotcraftClientOptions` 对象
   - `url: string`: **必需**, WebSocket 服务器地址。
   - `token: string`: **必需**, 用户认证 token。
   - `gamecode: string`: **必需**, 要进入的游戏代码。

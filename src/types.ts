@@ -29,9 +29,9 @@ export enum ConnectionState {
 }
 
 /**
- * Configuration options for initializing the NetworkClient.
+ * Configuration options for initializing the SlotcraftClient.
  */
-export interface NetworkClientOptions {
+export interface SlotcraftClientOptions {
   /** The WebSocket URL of the game server. */
   url: string;
   /** Optional: Maximum number of reconnection attempts. Defaults to 10. */

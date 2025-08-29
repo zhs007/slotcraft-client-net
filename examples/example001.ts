@@ -1,9 +1,9 @@
 /**
- * @fileoverview Example 001: Connect to the server using the refactored NetworkClient.
+ * @fileoverview Example 001: Connect to the server using the refactored SlotcraftClient.
  *
  * This script demonstrates the following:
  * 1.  Loading configuration from environment variables (`.env` file).
- * 2.  Using the high-level `NetworkClient` to manage connection and state.
+ * 2.  Using the high-level `SlotcraftClient` to manage connection and state.
  * 3.  Logging all raw WebSocket traffic using the `raw_message` event.
  * 4.  Executing a standard sequence: connect -> enter game -> perform action.
  *
@@ -18,7 +18,7 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'isomorphic-ws';
-import { NetworkClient } from '../src/main';
+import { SlotcraftClient } from '../src/main';
 import { RawMessagePayload } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.
@@ -58,7 +58,7 @@ const main = async () => {
   // Clear the log file at the start.
   fs.writeFileSync(LOG_FILE, '--- WebSocket Communication Log ---\n\n');
 
-  const client = new NetworkClient({ url: WEBSOCKET_URL });
+  const client = new SlotcraftClient({ url: WEBSOCKET_URL });
 
   // Setup logging
   client.on('raw_message', logRawMessage);
@@ -91,11 +91,15 @@ const main = async () => {
     }
   });
 
-  // Listen to state changes and spin once when entering IN_GAME
+  // Listen to state changes: log state transitions and append to LOG_FILE with a clear marker
   const onState = ({ current }: { current: string }) => {
-    if (current === 'IN_GAME') {
-      client.off('state', onState as any);
-      spinAcrossLines();
+    console.log(`State change: ${current}`);
+    const ts = new Date().toISOString();
+    const entry = `[STATE] ${ts}: ${current}\n\n`;
+    try {
+      fs.appendFileSync(LOG_FILE, entry);
+    } catch (err) {
+      console.error(`Failed to write state to log file ${LOG_FILE}:`, err);
     }
   };
   client.on('state', onState as any);
@@ -161,10 +165,10 @@ const main = async () => {
 
     // 2. Enter the game
     await client.enterGame(GAME_CODE);
-    console.log(`Entered game ${GAME_CODE}. Waiting until fully IN_GAME to send spin...`);
+    console.log(`Entered game ${GAME_CODE}. Using enterGame cmdret to start spins immediately.`);
 
-    // The 'message' event handler will now take over to send the game action
-    // when it receives the first gameuserinfo message with a ctrlid.
+    // Start spins immediately after enterGame returns (cmdret should indicate comeingame)
+    spinAcrossLines();
   } catch (error) {
     console.error('Failed during connection or entering game:', error);
     client.disconnect();

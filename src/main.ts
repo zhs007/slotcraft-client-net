@@ -2,7 +2,7 @@ import { Connection } from './connection';
 import { EventEmitter } from './event-emitter';
 import {
   ConnectionState,
-  NetworkClientOptions,
+  SlotcraftClientOptions,
   DisconnectEventPayload,
   RawMessagePayload,
   UserInfo,
@@ -15,8 +15,8 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-export class NetworkClient {
-  private options: NetworkClientOptions;
+export class SlotcraftClient {
+  private options: SlotcraftClientOptions;
   private connection: Connection;
   private state: ConnectionState = ConnectionState.IDLE;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -27,7 +27,7 @@ export class NetworkClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userInfo: UserInfo = {};
 
-  constructor(options: NetworkClientOptions) {
+  constructor(options: SlotcraftClientOptions) {
     this.options = {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
@@ -295,8 +295,34 @@ export class NetworkClient {
             }
             this.pendingRequests.delete(msg.cmdid);
           }
+          // Drive state transitions on cmdret where applicable
+          switch (msg.cmdid) {
+            case 'gamectrl3': {
+              // Spin ended: decide new state based on cached totals
+              if (this.state === ConnectionState.SPINNING) {
+                const totalwin = this.userInfo.lastTotalWin ?? 0;
+                const gmi = this.userInfo.lastGMI;
+                if (totalwin > 0) {
+                  this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+                } else {
+                  this.setState(ConnectionState.IN_GAME);
+                }
+              }
+              break;
+            }
+            case 'comeingame3': {
+              // enterGame() promise chain already moves to IN_GAME on success
+              break;
+            }
+            case 'collect': {
+              // collect() promise chain already handles state; no action here
+              break;
+            }
+            default:
+              break;
+          }
         } else {
-          // Passive messages: update caches where relevant
+          // Passive messages: update caches where relevant only (no state transitions)
           this.updateCaches(msg);
           this.emitter.emit('message', msg);
         }
@@ -358,22 +384,7 @@ export class NetworkClient {
             ? msg.results
             : undefined;
         if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
-        // If currently in SPINNING, transition to SPINEND immediately (real servers may push gmi before cmdret)
-        if (this.state === ConnectionState.SPINNING) {
-          this.setState(ConnectionState.SPINEND, { gmi: g });
-          if (!(typeof totalwin === 'number' && totalwin > 0)) {
-            this.setState(ConnectionState.IN_GAME);
-          }
-        }
-
-        // If currently in SPINEND, emit a state event carrying gmi context
-        if (this.state === ConnectionState.SPINEND) {
-          this.setState(ConnectionState.SPINEND, { gmi: g });
-          // Drive state when spin just ended: if totalwin not positive, return to IN_GAME
-          if (!(typeof totalwin === 'number' && totalwin > 0)) {
-            this.setState(ConnectionState.IN_GAME);
-          }
-        }
+        // Do not change state on passive messages; decisions occur on cmdret
         break;
       }
       case 'gamecfg': {

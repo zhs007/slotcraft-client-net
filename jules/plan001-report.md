@@ -11,7 +11,7 @@
 1.  **项目初始化**: 使用 `npm init` 创建了 `package.json` 并安装了所有必要的开发依赖，包括 `typescript`, `jest`, `ts-jest` 等。
 2.  **配置文件**: 创建并配置了 `tsconfig.json` 以满足库项目的编译需求（如生成声明文件），同时创建了 `jest.config.js`。
 3.  **目录结构**: 创建了 `src/` 和 `tests/` 目录，为源代码和测试文件提供了清晰的组织结构。
-4.  **核心类型**: 在 `src/types.ts` 文件中，定义了整个项目所需的核心类型，包括 `ConnectionState` 枚举、`NetworkClientOptions`、`UserInfo` 以及客户端/服务器消息接口。这些类型为后续的强类型开发奠定了基础。
+4.  **核心类型**: 在 `src/types.ts` 文件中，定义了整个项目所需的核心类型，包括 `ConnectionState` 枚举、`SlotcraftClientOptions`、`UserInfo` 以及客户端/服务器消息接口。这些类型为后续的强类型开发奠定了基础。
 
 ## 最终状态
 

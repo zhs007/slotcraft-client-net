@@ -14,14 +14,11 @@
       - **安装**: `npm install <package-name>`。
       - **快速上手**: 一个完整的代码示例，展示如何导入、实例化、连接、发送消息和监听事件。
       - **API 参考**:
-        - `new NetworkClient(options)`: 构造函数和 `options` 参数详解。
-        - `client.connect(): Promise<void>`: 方法说明、成功和失败的情况。
-        - `client.send(cmd, params): Promise<any>`: 方法说明、参数、返回值。
-        - `client.disconnect()`: 方法说明。
-        - `client.on(event, callback)`: 事件监听。
-      - **事件列表**:
-        - 详细列出所有对外触发的事件 (`connect`, `disconnect`, `ready`, `error`, `reconnecting` 等)，并说明每个事件的回调参数。
-      - **高级用法**: 如何处理重连、如何利用返回的 `Promise` 进行流程控制等。
+
+- `new SlotcraftClient(options)`: 构造函数和 `options` 参数详解。- `client.connect(): Promise<void>`: 方法说明、成功和失败的情况。- `client.send(cmd, params): Promise<any>`: 方法说明、参数、返回值。- `client.disconnect()`: 方法说明。- `client.on(event, callback)`: 事件监听。
+  - **事件列表**:
+    - 详细列出所有对外触发的事件 (`connect`, `disconnect`, `ready`, `error`, `reconnecting` 等)，并说明每个事件的回调参数。
+  - **高级用法**: 如何处理重连、如何利用返回的 `Promise` 进行流程控制等。
 
 2.  **编写使用文档 (英文)**:
     - **创建文件**: `docs/usage_en.md`。

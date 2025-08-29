@@ -13,7 +13,7 @@
     - 实现了 `tryReconnect` 方法，该方法采用带上限的指数退避算法（exponential backoff）来计算重连延迟，避免了在服务器故障时频繁重连。
     - 重连成功后，会重置重连尝试次数；达到最大尝试次数后，则会彻底放弃并进入 `DISCONNECTED` 状态。
 2.  **请求缓存**:
-    - 在 `NetworkClient` 中添加了 `requestQueue` 数组。
+    - 在 `SlotcraftClient` 中添加了 `requestQueue` 数组。
     - 修改了 `send()` 方法的逻辑：当客户端处于 `RECONNECTING` 状态时，`send` 请求不会被立即拒绝，而是连同其 `Promise` 的 `resolve`/`reject` 函数一起被存入队列。
 3.  **队列处理**:
     - 实现了 `processRequestQueue` 方法。当客户端重连成功并再次进入 `IN_GAME` 状态后，该方法会被调用，遍历队列并重新发送所有被缓存的请求，同时将结果传递给调用者最初获得的 `Promise`。

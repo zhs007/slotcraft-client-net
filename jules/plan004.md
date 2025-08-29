@@ -2,7 +2,7 @@
 
 ## 目标
 
-构建与游戏模块交互的桥梁。这包括实现一个轻量级的事件分发器，并将其集成到 `NetworkClient` 中，同时设计一套简洁、易用的公共 API，供游戏层调用。
+构建与游戏模块交互的桥梁。这包括实现一个轻量级的事件分发器，并将其集成到 `SlotcraftClient` 中，同时设计一套简洁、易用的公共 API，供游戏层调用。
 
 ## 主要步骤
 
@@ -17,14 +17,16 @@
       - `once(event: string, callback: Function): void`: 实现只监听一次的订阅。
     - **编写单元测试**: 创建 `tests/event-emitter.test.ts`，测试 `on`, `off`, `emit`, `once` 的功能是否正确。
 
-2.  **集成事件分发到 `NetworkClient`**:
-    - 在 `NetworkClient` 类中，创建一个 `EventEmitter` 的实例。
+2.  **集成事件分发到 `SlotcraftClient`**:
 
-      ```typescript
-      import { EventEmitter } from './event-emitter';
+- 在 `SlotcraftClient` 类中，创建一个 `EventEmitter` 的实例。
 
-      class NetworkClient {
-        private emitter = new EventEmitter();
+  ```typescript
+  import { EventEmitter } from './event-emitter';
+  ```
+
+class SlotcraftClient {
+private emitter = new EventEmitter();
 
         // 公开的 on, off, once 方法
         public on(event: string, callback: Function) {
@@ -38,13 +40,13 @@
       }
       ```
 
-    - 在 `NetworkClient` 的关键逻辑点触发事件。例如：
-      - 连接成功 (`handleOpen`) -> `this.emitter.emit('connect')`
-      - 登录成功 -> `this.emitter.emit('login', userInfo)`
-      - 进入游戏成功 -> `this.emitter.emit('ready', gameInfo)`
-      - 收到游戏数据 -> `this.emitter.emit('data', gameData)`
-      - 发生错误 -> `this.emitter.emit('error', errorDetails)`
-      - 连接断开 -> `this.emitter.emit('disconnect', { code, reason })`
+- 在 `SlotcraftClient` 的关键逻辑点触发事件。例如：
+  - 连接成功 (`handleOpen`) -> `this.emitter.emit('connect')`
+  - 登录成功 -> `this.emitter.emit('login', userInfo)`
+  - 进入游戏成功 -> `this.emitter.emit('ready', gameInfo)`
+  - 收到游戏数据 -> `this.emitter.emit('data', gameData)`
+  - 发生错误 -> `this.emitter.emit('error', errorDetails)`
+  - 连接断开 -> `this.emitter.emit('disconnect', { code, reason })`
 
 3.  **设计和实现公共 API**:
     - **API 目标**: 简洁、易用、符合用户直觉。
@@ -73,7 +75,7 @@
 ## 验收标准
 
 - `src/event-emitter.ts` 和对应的测试已完成。
-- `NetworkClient` 成功集成了事件分发器，并在关键节点触发事件。
+- `SlotcraftClient` 成功集成了事件分发器，并在关键节点触发事件。
 - 公共 API (`connect`, `send`, `disconnect`, `on`, `off`) 已实现。
 - `send` 方法是异步的，通过 `Promise` 返回结果，并能正确处理 `ctrlid` 的匹配。
 - 单元测试覆盖了 API 的各种成功和失败场景。

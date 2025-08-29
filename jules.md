@@ -39,7 +39,7 @@
 ├── src/               # 源代码
 │   ├── types.ts       # 核心类型定义
 │   ├── connection.ts  # WebSocket 封装
-│   ├── main.ts        # 主模块 (NetworkClient)
+│   ├── main.ts        # 主模块 (SlotcraftClient)
 │   └── event-emitter.ts # 事件分发器
 ├── tests/             # 测试文件
 ├── examples/          # 示例代码
@@ -55,7 +55,7 @@
 为了方便开发者理解和快速上手，项目在 `examples/` 目录下提供了一个可以直接运行的示例脚本。
 
 - **`examples/example001.ts`**:
-  - **功能**: 使用 `NetworkClient` 演示了完整的客户端生命周期：`connect`, `enterGame`, `send`。
+  - **功能**: 使用 `SlotcraftClient` 演示了完整的客户端生命周期：`connect`, `enterGame`, `send`。
   - **配置**: 通过根目录的 `.env` 文件进行配置（`WEBSOCKET_URL`, `TOKEN`, `GAME_CODE`）。
   - **协议日志**: 该示例演示了如何通过监听 `raw_message` 事件来记录所有与服务器的上下行通信到 `msg001.txt` 文件。这份日志可以作为开发和调试，乃至实现 Mock Server 的重要依据。
   - **运行**: `npx ts-node examples/example001.ts`

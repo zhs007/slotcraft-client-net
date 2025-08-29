@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NetworkClient } from '../src/main';
+import { SlotcraftClient } from '../src/main';
 import { Connection } from '../src/connection';
-import { ConnectionState, NetworkClientOptions } from '../src/types';
+import { ConnectionState, SlotcraftClientOptions } from '../src/types';
 
 // Mock the Connection class
 vi.mock('../src/connection');
@@ -9,10 +9,10 @@ vi.mock('../src/connection');
 // Helper to introduce a small delay for async operations to complete
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('NetworkClient (Real Timers)', () => {
-  let client: NetworkClient;
+describe('SlotcraftClient (Real Timers)', () => {
+  let client: SlotcraftClient;
   let mockConnection: any;
-  const options: NetworkClientOptions = {
+  const options: SlotcraftClientOptions = {
     url: 'ws://test.com',
     reconnectDelay: 10, // Use short delays for testing
     requestTimeout: 50,
@@ -22,7 +22,7 @@ describe('NetworkClient (Real Timers)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    client = new NetworkClient(options);
+    client = new SlotcraftClient(options);
     mockConnection = (Connection as any).mock.instances[0];
   });
 
@@ -237,7 +237,7 @@ describe('NetworkClient (Real Timers)', () => {
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
-    it('should emit SPINEND state with gmi data and cache lastGMI', async () => {
+    it('should emit SPINEND state with gmi data and cache lastGMI (transition on cmdret)', async () => {
       // Enter game
       const egPromise = client.enterGame(TEST_GAME_CODE);
       await simulateCmdRet('comeingame3');
@@ -256,14 +256,13 @@ describe('NetworkClient (Real Timers)', () => {
       const stateEvents: any[] = [];
       client.on('state', (e: any) => stateEvents.push(e));
 
-      // Spin -> cmdret transitions to SPINEND conservatively
+      // Start spin and push a gamemoduleinfo with a win BEFORE cmdret so caches are ready
       const sp = client.spin({});
-      await simulateCmdRet('gamectrl3');
-      await sp;
-
-      // Push a gamemoduleinfo with a win to keep SPINEND and attach gmi
       const gmi = { playIndex: 10, totalwin: 5, replyPlay: { results: [{}, {}] } };
       await pushMsg({ msgid: 'gamemoduleinfo', gameid: 99, gmi });
+      // Now deliver cmdret to drive the state transition
+      await simulateCmdRet('gamectrl3');
+      await sp;
 
       // Find an event where current is SPINEND and has data.gmi
       const spinendEvt = stateEvents.find((e) => e.current === 'SPINEND' && e.data && e.data.gmi);
@@ -271,16 +270,15 @@ describe('NetworkClient (Real Timers)', () => {
       expect(spinendEvt.data.gmi).toEqual(gmi);
       expect(client.getUserInfo().lastGMI).toEqual(gmi);
 
-      // Now simulate game calling collect to end
-      await pushMsg({
-        msgid: 'gamemoduleinfo',
-        gameid: 99,
-        gmi: { totalwin: 0, replyPlay: { results: [] } },
-      });
+      // After collect, state goes back to IN_GAME via collect cmdret
+      const collectP = client.collect();
+      await simulateCmdRet('collect');
+      await simulateCmdRet('collect');
+      await collectP;
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
-    it('should handle gamemoduleinfo arriving before cmdret (state -> SPINEND, promise resolves on cmdret)', async () => {
+    it('should handle gamemoduleinfo arriving before cmdret (stay SPINNING until cmdret, then IN_GAME for no-win)', async () => {
       // Enter game
       const egPromise = client.enterGame(TEST_GAME_CODE);
       await simulateCmdRet('comeingame3');
@@ -302,20 +300,19 @@ describe('NetworkClient (Real Timers)', () => {
       // Start spin, do not send cmdret yet
       const spinP = client.spin({});
       expect(client.getState()).toBe(ConnectionState.SPINNING);
-      // Push GMI now with no win -> should transition back to IN_GAME
+      // Push GMI now with no win -> should NOT transition yet (only cmdret changes state)
       await pushMsg({
         msgid: 'gamemoduleinfo',
         gameid: 5,
         gmi: { totalwin: 0, replyPlay: { results: [] } },
       });
-      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+      expect(client.getState()).toBe(ConnectionState.SPINNING);
       // Now deliver cmdret to resolve the promise
       await simulateCmdRet('gamectrl3');
       await expect(spinP).resolves.toBeDefined();
-      // Validate we saw SPINNING -> SPINEND (with data) -> IN_GAME sequence
+      // Validate we saw SPINNING -> IN_GAME sequence (no win)
       const currents = evtSpy.mock.calls.map((c) => c[0].current);
       expect(currents).toContain('SPINNING');
-      expect(currents).toContain('SPINEND');
       expect(currents[currents.length - 1]).toBe('IN_GAME');
     });
   });

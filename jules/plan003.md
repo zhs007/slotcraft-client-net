@@ -2,35 +2,37 @@
 
 ## 目标
 
-实现 `NetworkClient` 主类，该类是整个库的核心。它将使用 `Connection` 类进行网络通信，并管理从连接到游戏的完整状态机、处理所有服务器协议、维护用户信息和心跳。
+实现 `SlotcraftClient` 主类，该类是整个库的核心。它将使用 `Connection` 类进行网络通信，并管理从连接到游戏的完整状态机、处理所有服务器协议、维护用户信息和心跳。
 
 ## 主要步骤
 
 1.  **创建文件**:
     - 在 `src/` 目录下创建 `main.ts` 文件。
 
-2.  **实现 `NetworkClient` 类骨架**:
+2.  **实现 `SlotcraftClient` 类骨架**:
     - 引入 `Connection` 和 `src/types.ts` 中定义的类型。
     - **状态管理**:
       - 私有属性 `private state: ConnectionState`，并初始化为 `IDLE`。
       - 私有属性 `private userInfo: UserInfo`，用于存储用户数据。
       - 私有属性 `private connection: Connection`。
-    - **构造函数**: `constructor(options: NetworkClientOptions)`，保存配置。
-    - **核心方法(桩)**: 创建 `connect()`, `disconnect()`, `sendGameCtrl(params: any)` 等公共方法的空实现。
+
+- **构造函数**: `constructor(options: SlotcraftClientOptions)`，保存配置。
+  - **核心方法(桩)**: 创建 `connect()`, `disconnect()`, `sendGameCtrl(params: any)` 等公共方法的空实现。
 
 3.  **实现连接与登录流程**:
     - 在 `connect()` 方法中，实现完整的“连接 -> 登录 -> 进入游戏”流程。
     - 实例化 `Connection` 并调用其 `connect()` 方法。
-    - 设置 `connection` 实例的 `onOpen`, `onMessage`, `onClose`, `onError` 回调，将它们链接到 `NetworkClient` 内部的私有处理方法，例如 `private handleOpen()`, `private handleMessage(data)`, `private handleClose()`。
-    - **状态转换**:
-      - 调用 `connect()` 时，设置状态为 `CONNECTING`。
-      - `handleOpen()`: 连接成功，发送 `login` 消息，设置状态为 `LOGGING_IN`。
-      - `handleMessage()`: 这是最复杂的部分。
-        - 解析消息 `JSON.parse(data)`。
-        - 使用 `switch (message.cmd)` 来处理不同类型的服务器消息。
-        - **登录响应**: 收到 `login` 响应后，如果成功，保存 `token`、`ctrlid` 等信息到 `userInfo`，然后发送 `enter_game` 消息，设置状态为 `ENTERING_GAME`。如果失败，处理错误，关闭连接。
-        - **进入游戏响应**: 收到 `enter_game` 响应后，如果成功，更新 `userInfo`，设置状态为 `IN_GAME`，此时整个连接流程才算完成。对外触发 `ready` 或 `gameReady` 事件。
-        - **其他消息**: 处理如 `balance_update`, `game_result` 等服务器主动推送的消息。
+
+- 设置 `connection` 实例的 `onOpen`, `onMessage`, `onClose`, `onError` 回调，将它们链接到 `SlotcraftClient` 内部的私有处理方法，例如 `private handleOpen()`, `private handleMessage(data)`, `private handleClose()`。
+  - **状态转换**:
+    - 调用 `connect()` 时，设置状态为 `CONNECTING`。
+    - `handleOpen()`: 连接成功，发送 `login` 消息，设置状态为 `LOGGING_IN`。
+    - `handleMessage()`: 这是最复杂的部分。
+      - 解析消息 `JSON.parse(data)`。
+      - 使用 `switch (message.cmd)` 来处理不同类型的服务器消息。
+      - **登录响应**: 收到 `login` 响应后，如果成功，保存 `token`、`ctrlid` 等信息到 `userInfo`，然后发送 `enter_game` 消息，设置状态为 `ENTERING_GAME`。如果失败，处理错误，关闭连接。
+      - **进入游戏响应**: 收到 `enter_game` 响应后，如果成功，更新 `userInfo`，设置状态为 `IN_GAME`，此时整个连接流程才算完成。对外触发 `ready` 或 `gameReady` 事件。
+      - **其他消息**: 处理如 `balance_update`, `game_result` 等服务器主动推送的消息。
 
 4.  **实现心跳 (Keep-Alive)**:
     - 在 `login` 成功后，使用 `setInterval` 启动一个定时器，定期向服务器发送 `keepalive` (或 `heartbeat`) 消息。
@@ -57,7 +59,7 @@
 
 ## 验收标准
 
-- `src/main.ts` 文件实现了 `NetworkClient` 类。
+- `src/main.ts` 文件实现了 `SlotcraftClient` 类。
 - `connect()` 方法能完整地执行连接、登录、进游戏流程，并正确维护状态。
 - 心跳机制能正常工作。
 - 能够正确解析和处理服务器的主要消息类型和错误码。

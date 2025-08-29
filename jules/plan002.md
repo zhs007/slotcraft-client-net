@@ -17,16 +17,17 @@
     - **状态属性**: 提供一个 `isOpen(): boolean` 的 getter，用于检查连接是否处于 `OPEN` 状态。
 
 3.  **处理 WebSocket 事件**:
-    - `Connection` 类应该允许外部注入事件回调函数，以便将 WebSocket 的原生事件（`onopen`, `onclose`, `onerror`, `onmessage`）通知给上层业务逻辑（即主客户端 `NetworkClient`）。
-    - **设计**: 可以通过公共属性（如 `onOpen: (() => void) | null = null;`）或方法（如 `setOnOpen(callback: () => void)`）来实现。
-    - 在内部，将 `WebSocket` 实例的事件处理器绑定到这些回调上。例如：
-      ```typescript
-      this.ws.onopen = () => {
-        if (this.onOpen) {
-          this.onOpen();
-        }
-      };
-      ```
+
+- `Connection` 类应该允许外部注入事件回调函数，以便将 WebSocket 的原生事件（`onopen`, `onclose`, `onerror`, `onmessage`）通知给上层业务逻辑（即主客户端 `SlotcraftClient`）。
+  - **设计**: 可以通过公共属性（如 `onOpen: (() => void) | null = null;`）或方法（如 `setOnOpen(callback: () => void)`）来实现。
+  - 在内部，将 `WebSocket` 实例的事件处理器绑定到这些回调上。例如：
+    ```typescript
+    this.ws.onopen = () => {
+      if (this.onOpen) {
+        this.onOpen();
+      }
+    };
+    ```
 
 4.  **编写单元测试**:
     - 在 `tests/` 目录下创建 `connection.test.ts`。

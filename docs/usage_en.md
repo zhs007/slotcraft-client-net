@@ -21,7 +21,7 @@ _(Note: `<package-name>` will be determined when publishing to npm)_
 ## Quick Start
 
 ```typescript
-import { NetworkClient } from '<package-name>';
+import { SlotcraftClient } from '<package-name>';
 
 const options = {
   url: 'ws://your-server.com/ws',
@@ -29,7 +29,7 @@ const options = {
   gamecode: 'game-101',
 };
 
-const client = new NetworkClient(options);
+const client = new SlotcraftClient(options);
 
 // Listen for events
 client.on('connect', () => {
@@ -77,11 +77,11 @@ main();
 
 ## API Reference
 
-### `new NetworkClient(options)`
+### `new SlotcraftClient(options)`
 
 Creates a new client instance.
 
-- `options`: `NetworkClientOptions` object
+- `options`: `SlotcraftClientOptions` object
   - `url: string`: **Required**. The WebSocket server URL.
   - `token: string`: **Required**. The user's authentication token.
   - `gamecode: string`: **Required**. The game code to enter.

@@ -46,7 +46,7 @@
     - `once()` 返回用于取消订阅的函数或标识；
     - 在内部保存包装映射，`off` 时可识别并移除对应包装器。
 
-### 3) `src/main.ts`（NetworkClient）
+### 3) `src/main.ts`（SlotcraftClient）
 
 - 优点
   - 状态机拆分较清楚：CONNECTING → CONNECTED → LOGGING_IN → ENTERING_GAME → IN_GAME；
@@ -90,7 +90,7 @@
 
 ## 库导出与发布建议
 
-- 目前 `package.json` 指向 `dist/main.js` 和 `dist/main.d.ts`，而 `src/main.ts` 仅导出 `NetworkClient`。如果使用方需要 `ConnectionState`、事件 payload 等类型，建议：
+- 目前 `package.json` 指向 `dist/main.js` 和 `dist/main.d.ts`，而 `src/main.ts` 仅导出 `SlotcraftClient`。如果使用方需要 `ConnectionState`、事件 payload 等类型，建议：
   - 在 `src/main.ts` 中 `export * from './types'` 以集中导出；
   - 或新增 `src/index.ts` 作为 barrel 文件，统一导出对外 API（并将 `package.json#main/types` 指向 `dist/index.*`）。
 

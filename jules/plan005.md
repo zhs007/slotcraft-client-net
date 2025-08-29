@@ -7,10 +7,11 @@
 ## 主要步骤
 
 1.  **实现重连触发机制**:
-    - 在 `NetworkClient` 的 `handleClose(event)` 方法中，增加逻辑判断。
-    - 检查 `event.wasClean` 标志。如果为 `false`，则表示是意外断开，需要启动重连流程。
-    - 设置一个新的状态 `RECONNECTING`，并立即转换到此状态 `this.state = ConnectionState.RECONNECTING`。
-    - 对外触发 `reconnecting` 事件，通知上层应用。
+
+- 在 `SlotcraftClient` 的 `handleClose(event)` 方法中，增加逻辑判断。
+  - 检查 `event.wasClean` 标志。如果为 `false`，则表示是意外断开，需要启动重连流程。
+  - 设置一个新的状态 `RECONNECTING`，并立即转换到此状态 `this.state = ConnectionState.RECONNECTING`。
+  - 对外触发 `reconnecting` 事件，通知上层应用。
 
 2.  **实现重连策略 (Exponential Backoff)**:
     - 为了避免在服务器故障时造成 "惊群效应"，应采用带随机抖动的指数退避策略。
@@ -23,11 +24,12 @@
     - 设置一个最大重连次数，超过后应停止重连，并对外触发一个永久性失败的事件 `reconnect_failed`。
 
 3.  **实现请求缓存/队列**:
-    - 在 `NetworkClient` 中创建一个私有队列 `private requestQueue: any[] = []`。
-    - 修改 `send()` 方法的逻辑：
-      - 当调用 `send()` 时，如果当前状态是 `IN_GAME`，则直接发送。
-      - 如果当前状态是 `RECONNECTING` 或 `DISCONNECTED`，则不应立即拒绝 `Promise`，而是将该请求（包括其 `resolve`, `reject` 函数和请求参数）存入 `requestQueue`。
-      - `send()` 方法此时应返回一个不会被 `resolve`/`reject` 的 `Promise`，直到重连成功或失败。
+
+- 在 `SlotcraftClient` 中创建一个私有队列 `private requestQueue: any[] = []`。
+  - 修改 `send()` 方法的逻辑：
+    - 当调用 `send()` 时，如果当前状态是 `IN_GAME`，则直接发送。
+    - 如果当前状态是 `RECONNECTING` 或 `DISCONNECTED`，则不应立即拒绝 `Promise`，而是将该请求（包括其 `resolve`, `reject` 函数和请求参数）存入 `requestQueue`。
+    - `send()` 方法此时应返回一个不会被 `resolve`/`reject` 的 `Promise`，直到重连成功或失败。
 
 4.  **处理队列中的请求**:
     - 当重连并成功进入游戏（状态再次变为 `IN_GAME`）后，立即处理 `requestQueue`。
@@ -47,7 +49,7 @@
 
 ## 验收标准
 
-- 当 WebSocket 意外断开时，`NetworkClient` 会自动进入 `RECONNECTING` 状态。
+- 当 WebSocket 意外断开时，`SlotcraftClient` 会自动进入 `RECONNECTING` 状态。
 - 重连尝试遵循指数退避策略。
 - 在断线和重连期间，`send()` 请求会被缓存。
 - 重连成功后，缓存的请求会被自动发送。

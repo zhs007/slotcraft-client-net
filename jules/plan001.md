@@ -28,7 +28,7 @@
     - **状态枚举**: 创建 `ConnectionState` 枚举，包含 `IDLE`, `CONNECTING`, `CONNECTED`, `LOGGING_IN`, `LOGGED_IN`, `ENTERING_GAME`, `IN_GAME`, `DISCONNECTED`, `RECONNECTING` 等状态。
     - **消息接口**: 定义客户端发送消息 `ClientMessage` 和服务器推送消息 `ServerMessage` 的基础接口和具体类型。
     - **用户信息**: 定义 `UserInfo` 接口，用于存储 `token`, `ctrlid`, `balance`, `gamecode` 等。
-    - **配置选项**: 定义 `NetworkClientOptions` 接口，用于初始化客户端时的配置，如 `url`, `token`, `gamecode` 等。
+    - **配置选项**: 定义 `SlotcraftClientOptions` 接口，用于初始化客户端时的配置，如 `url`, `token`, `gamecode` 等。
     - **事件载荷**: 为所有需要对外发送的事件定义其数据载荷的类型，例如 `OnGameDataPayload`, `OnErrorPayload`。
 
 6.  **配置 Jest**:

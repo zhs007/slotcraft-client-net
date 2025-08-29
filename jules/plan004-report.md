@@ -9,8 +9,8 @@
 此任务成功完成，极大地提升了库的易用性。
 
 1.  **`EventEmitter` 实现**: 在 `src/event-emitter.ts` 中，从零开始实现了一个简单的 `EventEmitter` 类，包含了 `on`, `off`, `emit`, `once` 等核心功能，并为其编写了完整的单元测试。
-2.  **客户端集成**: 将 `EventEmitter` 实例集成到 `NetworkClient` 中，并暴露了 `on`, `off`, `once` 方法，允许用户监听客户端的生命周期事件。
-3.  **事件触发**: 在 `NetworkClient` 的关键逻辑点（如连接成功、收到消息、断开连接等）添加了 `emit` 调用，以向外广播 `connect`, `ready`, `disconnect`, `data` 等事件。
+2.  **客户端集成**: 将 `EventEmitter` 实例集成到 `SlotcraftClient` 中，并暴露了 `on`, `off`, `once` 方法，允许用户监听客户端的生命周期事件。
+3.  **事件触发**: 在 `SlotcraftClient` 的关键逻辑点（如连接成功、收到消息、断开连接等）添加了 `emit` 调用，以向外广播 `connect`, `ready`, `disconnect`, `data` 等事件。
 4.  **Promise-based API**:
     - 重构了 `connect()` 方法，使其返回一个 `Promise`，该 Promise 在客户端成功进入游戏后 `resolve`，在连接失败时 `reject`。
     - 实现了新的公共 `send()` 方法，该方法同样返回 `Promise`。通过内部维护一个 `pendingRequests` Map，`send` 方法能够将请求的 `ctrlid` 与服务器的响应进行匹配，并在收到响应后 `resolve` 或 `reject` 对应的 Promise。

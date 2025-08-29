@@ -3,15 +3,15 @@
 ## 1. Goals（目标）
 
 - Provide a runnable TypeScript example `examples/example001.ts` that:
-    - Loads `WEBSOCKET_URL`, `TOKEN`, and `GAME_CODE` from environment variables (via `.env`).
-    - Uses the high-level `NetworkClient` to connect, authenticate, enter the game, and perform a standard spin/collect flow.
-    - Emits and logs all raw WebSocket traffic to `msg001.txt` for future mock-server work.
+  - Loads `WEBSOCKET_URL`, `TOKEN`, and `GAME_CODE` from environment variables (via `.env`).
+  - Uses the high-level `SlotcraftClient` to connect, authenticate, enter the game, and perform a standard spin/collect flow.
+  - Emits and logs all raw WebSocket traffic to `msg001.txt` for future mock-server work.
 - Produce supporting docs and updates:
-    - This plan (`jules/plan008.md`) captures goals and approach; a report `jules/plan008-report.md` will record execution details.
-    - Update `jules.md` with the new example and how to run it.
-    - Update `agents.md` if any agent changes are required.
+  - This plan (`jules/plan008.md`) captures goals and approach; a report `jules/plan008-report.md` will record execution details.
+  - Update `jules.md` with the new example and how to run it.
+  - Update `agents.md` if any agent changes are required.
 - Keep the example resilient and clear:
-    - Robust error handling, clean disconnects, and readable logging format `[DIRECTION] [TIMESTAMP]: [MESSAGE]`.
+  - Robust error handling, clean disconnects, and readable logging format `[DIRECTION] [TIMESTAMP]: [MESSAGE]`.
 
 ## 2. My Understanding of the Requirements
 
