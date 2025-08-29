@@ -76,7 +76,7 @@ This project communicates with the frontend via WebSocket using JSON. This guide
   - `gold` balance
   - `gamelevel`, `exp`, `iconid`, `spinnums` common fields
   - `token` session token (guest, etc.)
-  - `dttoken` third-party token (login `token`)
+  - `dttoken` third-party token (same as login `token`) — not cached client-side
   - `currency` (e.g., USD)
   - `jurisdiction` (region)
   - `freecash` available free cash (if any)
@@ -87,6 +87,7 @@ This project communicates with the frontend via WebSocket using JSON. This guide
   - `lastctrlid` previous encoded control ID
   - `giftfree` free spin/gift state (module-defined)
   - `playerState` game engine’s player state (server strips `private`)
+  - Client behavior: caches `ctrlid`, `lastctrlid`, and `playerState` into UserInfo; refreshed on each `gameuserinfo` push
   - Note: you must use this `ctrlid` as-is in subsequent `gamectrl3` requests.
 
 - `gamecfg` (after entering a game):
@@ -94,6 +95,8 @@ This project communicates with the frontend via WebSocket using JSON. This guide
   - `defaultLinebet` default line count
   - `maxTotalBetLimit` total bet cap (age/jurisdiction/currency dependent)
   - plus logic configs merged from backend `getLogicConfig/getLocalConfig`
+  - Client also caches `ver` and `coreVer` from this message for diagnostics
+  - Field `data` is a JSON string; the client parses and caches it in `UserInfo.gamecfgData`
 
 - `giftfreeinfo` snapshot (from platform + server filtering):
   - `fSpin` array of items like `{ id, bet, lines, times, total, remaining, effectiveTime, expireTime, title, info, drawn }`
@@ -113,12 +116,12 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
   - Request: `{ cmdid: "keepalive" }`
   - Response: `keepaliveret` + `cmdret`
 
-- checkver (version check)
+// Deprecated: checkver (version check)
   - Required: `nativever`, `scriptver`, `clienttype`, `businessid`
   - Example:
     ```json
     {
-      "cmdid": "checkver",
+  // Deprecated: "cmdid": "checkver",
       "nativever": 1710120,
       "scriptver": 1712260,
       "clienttype": "web",
@@ -143,6 +146,7 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
 
 - comeingame3 (enter game)
   - Required: `gamecode`, `tableid`, `isreconnect` (boolean)
+  - Note: `tableid` is currently reserved; pass an empty string `""`.
   - On success:
     - Pushes one or more: `gameuserinfo` (with first `ctrlid`), possibly `giftfreeinfo`, `commonjackpot`
     - Finally pushes: `gamecfg` (linebets/defaultLinebet/maxTotalBetLimit + logic config)
@@ -177,7 +181,7 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
 ## Typical sequence
 
 1. Establish WebSocket connection
-2. Version check: `checkver`
+2. Version check: `checkver` (Deprecated – no longer required)
 3. Login: `flblogin` or `guestlogin`
    - Server pushes: `timesync`, `gamecodeinfo`, `userbaseinfo`, (maybe) `commonjackpot`
 4. Enter game: `comeingame3`
@@ -199,7 +203,7 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
 
 - Enter a game:
   ```json
-  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "t1", "isreconnect": false }
+  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "", "isreconnect": false }
   ```
 - One spin:
   ```json

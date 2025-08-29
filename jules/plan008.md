@@ -21,7 +21,7 @@ The user wants a functional TypeScript example that demonstrates how to use the 
 1.  **`examples/example001.ts`**: A new example file.
     *   It must be configurable via environment variables (`WEBSOCKET_URL`, `TOKEN`, `GAME_CODE`). The user prefers using a `.env` file for this.
     *   It should connect to the WebSocket server and execute a specific sequence of actions:
-        1.  Perform a version check (`checkver`).
+    1.  Perform a version check (`checkver`). [Deprecated/Removed]
         2.  Log in to the server (`flblogin`).
         3.  Enter a specific game (`comeingame3`).
         4.  Send a game action, like a "spin" (`gamectrl3`).

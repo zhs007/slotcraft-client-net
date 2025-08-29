@@ -76,7 +76,7 @@
   - `gold` 余额
   - `gamelevel` `exp` `iconid` `spinnums` 等通用字段
   - `token` 会话token（游客等场景）
-  - `dttoken` 第三方平台token（登录传入的 `token`）
+  - `dttoken` 第三方平台token（与登录 `token` 一致）——客户端不做本地缓存
   - `currency` 币种（如 USD）
   - `jurisdiction` 辖区
   - `freecash` 可领取的免费现金（如有）
@@ -87,6 +87,7 @@
   - `lastctrlid` 上一控制ID（已编码）
   - `giftfree` 免费旋转/红包状态（结构由服务端模块给出）
   - `playerState` 游戏引擎玩家态（已去除 `private` 字段）
+  - 客户端行为：会将 `ctrlid`、`lastctrlid`、`playerState` 缓存在 UserInfo 中，并在每次收到 `gameuserinfo` 时刷新
   - 说明：前端后续发起 `gamectrl3` 时，必须使用这里的 `ctrlid`（原样回传，不要自行推算）。
 
 - `gamecfg`：进入游戏后下发，包含但不限于：
@@ -94,6 +95,8 @@
   - `defaultLinebet` 默认线数
   - `maxTotalBetLimit` 总下注上限（按年龄/辖区/币种等策略限制）
   - 以及游戏逻辑配置（由后端 `getLogicConfig/getLocalConfig` 合并）
+  - 客户端同时会缓存该消息中的 `ver` 与 `coreVer` 以便诊断定位
+  - 其中 `data` 字段是一个 JSON 字符串；客户端会解析并缓存到 `UserInfo.gamecfgData`
 
 - `giftfreeinfo`：红包/免费旋转列表与统计（来自 DT 接口+服务端过滤）。典型字段：
   - `fSpin`: 免费旋转项数组，每项可能包含 `{ id, bet, lines, times, total, remaining, effectiveTime, expireTime, title, info, drawn }`
@@ -113,12 +116,12 @@
   - 请求：`{ cmdid: "keepalive" }`
   - 响应：`keepaliveret` + `cmdret`
 
-- checkver（版本校验）
+// 已弃用：checkver（版本校验）
   - 必填：`nativever` `scriptver` `clienttype` `businessid`
   - 请求示例：
     ```json
     {
-      "cmdid": "checkver",
+  // 已弃用："cmdid": "checkver",
       "nativever": 1710120,
       "scriptver": 1712260,
       "clienttype": "web",
@@ -144,6 +147,7 @@
 
 - comeingame3（进入游戏）
   - 必填：`gamecode` `tableid` `isreconnect`(布尔)
+  - 说明：`tableid` 为保留字段，请传空字符串 `""`。
   - 成功：
     - 推送一次或多次：`gameuserinfo`（含 `ctrlid`）、可能的 `giftfreeinfo`、`commonjackpot`
     - 最终下发：`gamecfg`（含 `linebets/defaultLinebet/maxTotalBetLimit` + 逻辑配置）
@@ -179,7 +183,7 @@
 ## 典型接入时序
 
 1. 连接 WebSocket 成功
-2. 版本校验：`checkver`
+2. 版本校验：`checkver`（已弃用——不再需要）
 3. 登录：`flblogin` 或 `guestlogin`
    - 服务端推送：`timesync`、`gamecodeinfo`、`userbaseinfo`、（可能）`commonjackpot`
 4. 进入游戏：`comeingame3`
@@ -201,7 +205,7 @@
 
 - 进入游戏：
   ```json
-  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "t1", "isreconnect": false }
+  { "cmdid": "comeingame3", "gamecode": "game-default", "tableid": "", "isreconnect": false }
   ```
 - 一次 spin：
   ```json

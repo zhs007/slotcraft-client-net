@@ -5,6 +5,8 @@ import {
   NetworkClientOptions,
   DisconnectEventPayload,
   RawMessagePayload,
+  UserInfo,
+  SpinParams,
 } from './types';
 
 type PendingRequest = {
@@ -23,6 +25,7 @@ export class NetworkClient {
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private userInfo: UserInfo = {};
 
   constructor(options: NetworkClientOptions) {
     this.options = {
@@ -41,11 +44,31 @@ export class NetworkClient {
     return this.state;
   }
 
+  private setState(next: ConnectionState, data?: any): void {
+    if (this.state === next) {
+      // Allow emitting a state event with data even if state doesn't change
+      if (data !== undefined) {
+        const prev = this.state;
+        this.emitter.emit('state', { previous: prev, current: next, data });
+      }
+      return;
+    }
+    const prev = this.state;
+    this.state = next;
+    this.emitter.emit('state', { previous: prev, current: next, data });
+  }
+
+  public getUserInfo(): Readonly<UserInfo> {
+    return this.userInfo;
+  }
+
   public connect(token: string): Promise<void> {
     if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
       return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
-    this.state = ConnectionState.CONNECTING;
+    this.setState(ConnectionState.CONNECTING);
+    // Cache token early for convenience; it may also be refreshed via userbaseinfo
+    this.userInfo.token = token;
     this.connection.connect();
 
     return new Promise<void>((resolve, reject) => {
@@ -55,22 +78,13 @@ export class NetworkClient {
         this.emitter.once('disconnect', payload => rej(new Error(payload.reason)));
       })
         .then(() => {
-          // Perform login sequence
-          return this.send('checkver', {
-            nativever: 1710120,
-            scriptver: 1712260,
-            clienttype: 'web',
-            businessid: 'demo',
-          });
-        })
-        .then(() => {
           return this.send('flblogin', {
             token: token,
             language: 'en_US',
           });
         })
         .then(() => {
-          this.state = ConnectionState.CONNECTED;
+          this.setState(ConnectionState.CONNECTED);
           this.startHeartbeat();
           resolve();
         })
@@ -86,27 +100,127 @@ export class NetworkClient {
     if (this.state !== ConnectionState.CONNECTED) {
       return Promise.reject(new Error(`Cannot enter game in state: ${this.state}`));
     }
-    this.state = ConnectionState.ENTERING_GAME;
+    this.setState(ConnectionState.ENTERING_GAME);
+    // Cache gamecode for context
+    this.userInfo.gamecode = gamecode;
     return this.send('comeingame3', {
       gamecode,
-      tableid: 't1',
+      tableid: '',
       isreconnect: false,
     }).then(response => {
-      this.state = ConnectionState.IN_GAME;
+      this.setState(ConnectionState.IN_GAME);
       return response;
     });
   }
+
+  /**
+   * Send a spin (gamectrl3) using cached gameid/ctrlid.
+   * Updates ctrlid will be received via gameuserinfo and cached automatically.
+   */
+  public spin(params: SpinParams): Promise<any> {
+    if (this.state !== ConnectionState.IN_GAME) {
+      return Promise.reject(new Error(`Cannot spin in state: ${this.state}`));
+    }
+    const { gameid, ctrlid } = this.userInfo;
+    if (!gameid) {
+      return Promise.reject(new Error('gameid not available'));
+    }
+    if (!ctrlid) {
+      return Promise.reject(new Error('ctrlid not available'));
+    }
+
+    let { bet, lines, times = 1, autonums = -1, ctrlname = 'spin', ...rest } = params;
+    // Default bet from cached game config if not provided
+    if (bet == null) {
+      if (typeof this.userInfo.defaultLinebet === 'number') {
+        bet = this.userInfo.defaultLinebet;
+      }
+    }
+    // Validate bet against allowed linebets when available
+    if (typeof bet === 'number' && Array.isArray(this.userInfo.linebets)) {
+      if (!this.userInfo.linebets.includes(bet)) {
+        return Promise.reject(new Error(`Invalid bet ${bet}. Allowed: [${this.userInfo.linebets.join(',')}]`));
+      }
+    }
+    if (bet == null) {
+      return Promise.reject(new Error('bet is required and no default is available'));
+    }
+    // Default lines to smallest allowed if not provided and we have options
+    if (lines == null) {
+      const opts = this.userInfo.linesOptions;
+      if (Array.isArray(opts) && opts.length > 0) {
+        lines = Math.min(...opts);
+      }
+    }
+    const ctrlparam = { autonums, bet, lines, times, ...rest };
+    this.setState(ConnectionState.SPINNING);
+    return this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam }).then(() => {
+      // By protocol, gamemoduleinfo should have arrived before cmdret.
+      // Return the latest cached GMI snapshot and simple aggregates.
+      const gmi = this.userInfo.lastGMI;
+      const totalwin = this.userInfo.lastTotalWin ?? 0;
+      const results = this.userInfo.lastResultsCount ?? 0;
+      return { gmi, totalwin, results };
+    });
+  }
+
+  /**
+   * Collect winnings for the last play.
+   * If playIndex is omitted, uses cached userInfo.lastPlayIndex.
+   */
+  public collect(playIndex?: number): Promise<any> {
+    // Collect should be called after a spin ends; allow in SPINEND, or IN_GAME when game explicitly does a collect
+    if (this.state !== ConnectionState.SPINEND && this.state !== ConnectionState.IN_GAME) {
+      return Promise.reject(new Error(`Cannot collect in state: ${this.state}`));
+    }
+    const { gameid } = this.userInfo;
+    const resultsCount = this.userInfo.lastResultsCount;
+    const idx = playIndex ?? this.userInfo.lastPlayIndex;
+    if (!gameid) return Promise.reject(new Error('gameid not available'));
+    // When caller does not provide playIndex, derive sequence from resultsCount if available
+    const deriveSequence = (): number[] | undefined => {
+      if (typeof playIndex === 'number') return [playIndex];
+      if (typeof resultsCount === 'number') {
+        if (resultsCount > 1) return [resultsCount - 1, resultsCount];
+        if (resultsCount === 1) return [1];
+      }
+      if (typeof idx === 'number') return [idx];
+      return undefined;
+    };
+    const seq = deriveSequence();
+    if (!seq || seq.length === 0) return Promise.reject(new Error('playIndex not available'));
+
+    this.setState(ConnectionState.COLLECTING);
+    // Chain collects sequentially
+    let p: Promise<any> = Promise.resolve();
+    for (const i of seq) {
+      p = p.then(() => this.send('collect', { gameid, playIndex: i }));
+    }
+    return p
+      .then(res => {
+        // Only on success transition back to IN_GAME
+        this.setState(ConnectionState.IN_GAME);
+        return res;
+      })
+      .catch(err => {
+        // Stay around SPINEND for retry on failure
+        this.setState(ConnectionState.SPINEND);
+        throw err;
+      });
+  }
+
+  // (spinUntilSpinEnd removed per request)
 
   public disconnect(): void {
     this.stopHeartbeat();
     this.clearReconnectTimer();
     // Check if connection exists and is not already closing or closed
     if (this.connection) {
-        this.connection.disconnect();
+      this.connection.disconnect();
     }
     // Update state immediately for responsiveness
     if (this.state !== ConnectionState.DISCONNECTED) {
-        this.state = ConnectionState.DISCONNECTED;
+      this.setState(ConnectionState.DISCONNECTED);
     }
     this.rejectAllPendingRequests('Client disconnected.');
   }
@@ -180,12 +294,103 @@ export class NetworkClient {
             this.pendingRequests.delete(msg.cmdid);
           }
         } else {
+          // Passive messages: update caches where relevant
+          this.updateCaches(msg);
           this.emitter.emit('message', msg);
         }
       }
     } catch (error) {
       console.error('Failed to parse server message:', event.data);
       this.emitter.emit('error', new Error('Failed to parse server message'));
+    }
+  }
+
+  /**
+   * Update cached user/game info from passive messages.
+   */
+  private updateCaches(msg: any): void {
+    switch (msg.msgid) {
+      case 'userbaseinfo': {
+        const ub = msg.userbaseinfo || {};
+        this.userInfo.pid = ub.pid ?? this.userInfo.pid;
+        this.userInfo.uid = ub.uid ?? this.userInfo.uid;
+        this.userInfo.nickname = ub.nickname ?? this.userInfo.nickname;
+        // gold as balance
+        if (typeof ub.gold === 'number') this.userInfo.balance = ub.gold;
+        this.userInfo.token = ub.token ?? this.userInfo.token;
+        this.userInfo.currency = ub.currency ?? this.userInfo.currency;
+        this.userInfo.jurisdiction = ub.jurisdiction ?? this.userInfo.jurisdiction;
+        break;
+      }
+      case 'gamemoduleinfo': {
+        if (typeof msg.gameid === 'number') this.userInfo.gameid = msg.gameid;
+        // Cache last play index & win if present (support both top-level and nested in gmi)
+        const g = msg.gmi || {};
+        // Cache full gmi snapshot
+        this.userInfo.lastGMI = g;
+        const playIndex = (typeof msg.playIndex === 'number') ? msg.playIndex : (typeof g.playIndex === 'number' ? g.playIndex : undefined);
+        if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
+        const playwin = (typeof msg.playwin === 'number') ? msg.playwin : (typeof g.playwin === 'number' ? g.playwin : undefined);
+        const totalwin = (typeof msg.totalwin === 'number') ? msg.totalwin : (typeof g.totalwin === 'number' ? g.totalwin : undefined);
+        if (typeof playwin === 'number') this.userInfo.lastPlayWin = playwin;
+        if (typeof totalwin === 'number') this.userInfo.lastTotalWin = totalwin;
+        // results length
+        const resultsArr = Array.isArray(g.replyPlay?.results) ? g.replyPlay.results : (Array.isArray(msg.results) ? msg.results : undefined);
+        if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
+        // If currently in SPINNING, transition to SPINEND immediately (real servers may push gmi before cmdret)
+        if (this.state === ConnectionState.SPINNING) {
+          this.setState(ConnectionState.SPINEND, { gmi: g });
+          if (!(typeof totalwin === 'number' && totalwin > 0)) {
+            this.setState(ConnectionState.IN_GAME);
+          }
+        }
+
+        // If currently in SPINEND, emit a state event carrying gmi context
+        if (this.state === ConnectionState.SPINEND) {
+          this.setState(ConnectionState.SPINEND, { gmi: g });
+          // Drive state when spin just ended: if totalwin not positive, return to IN_GAME
+          if (!(typeof totalwin === 'number' && totalwin > 0)) {
+            this.setState(ConnectionState.IN_GAME);
+          }
+        }
+        break;
+      }
+      case 'gamecfg': {
+        if (typeof msg.defaultLinebet === 'number') this.userInfo.defaultLinebet = msg.defaultLinebet;
+        if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
+        if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
+        if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
+        if (typeof msg.data === 'string') {
+          try {
+            this.userInfo.gamecfgData = JSON.parse(msg.data);
+            // If no explicit bets array for lines, derive from gamecfgData keys
+            if (!Array.isArray((msg as any).bets) && this.userInfo.gamecfgData) {
+              const keys = Object.keys(this.userInfo.gamecfgData)
+                .map(k => Number(k))
+                .filter(n => Number.isFinite(n));
+              if (keys.length) this.userInfo.linesOptions = keys.sort((a, b) => a - b);
+            }
+          } catch {
+            // keep as undefined if parse fails
+            this.userInfo.gamecfgData = undefined;
+          }
+        }
+        // If server provides bets array, prefer it as lines options
+        if (Array.isArray((msg as any).bets)) {
+          const betsArr = (msg as any).bets.filter((n: any) => typeof n === 'number');
+          if (betsArr.length) this.userInfo.linesOptions = [...betsArr].sort((a, b) => a - b);
+        }
+        break;
+      }
+      case 'gameuserinfo': {
+        if (typeof msg.ctrlid === 'number') this.userInfo.ctrlid = msg.ctrlid;
+        if (typeof msg.lastctrlid === 'number') this.userInfo.lastctrlid = msg.lastctrlid;
+        // Cache the latest playerState object as-is
+        if (msg.playerState !== undefined) this.userInfo.playerState = msg.playerState;
+        break;
+      }
+      default:
+        break;
     }
   }
 
@@ -201,7 +406,7 @@ export class NetworkClient {
     if (this.state !== ConnectionState.DISCONNECTED && !payload.wasClean) {
       this.tryReconnect();
     } else {
-      this.state = ConnectionState.DISCONNECTED;
+      this.setState(ConnectionState.DISCONNECTED);
     }
   }
 
@@ -213,12 +418,12 @@ export class NetworkClient {
   private tryReconnect(): void {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
       console.error('Max reconnection attempts reached. Giving up.');
-      this.state = ConnectionState.DISCONNECTED;
+      this.setState(ConnectionState.DISCONNECTED);
       this.rejectAllPendingRequests('Reconnection failed.');
       return;
     }
 
-    this.state = ConnectionState.RECONNECTING;
+    this.setState(ConnectionState.RECONNECTING);
     this.emitter.emit('reconnecting', { attempt: this.reconnectAttempts + 1 });
 
     const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);

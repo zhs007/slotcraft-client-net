@@ -12,7 +12,7 @@ This seemingly simple task evolved into a major refactoring of the core `Network
 
 1.  I first created the example script `examples/example001.ts` using the low-level `Connection` class.
 2.  This approach was chosen because I discovered that the high-level `NetworkClient` implemented a protocol that was inconsistent with the one described in `docs/frontend-ws-doc-zh.md`.
-3.  This initial version correctly implemented the documented protocol (`checkver`, `flblogin`, `comeingame3`) and fulfilled all original requirements.
+3.  This initial version implemented the documented protocol (`flblogin`, `comeingame3`); `checkver` has since been deprecated and removed from the flow.
 
 ### Part 2: User Feedback and The Decision to Refactor
 
