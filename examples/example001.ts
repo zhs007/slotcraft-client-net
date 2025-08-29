@@ -1,11 +1,11 @@
 /**
- * @fileoverview Example 001: Connect to the server, log communication, and perform a basic game flow.
+ * @fileoverview Example 001: Connect to the server using the refactored NetworkClient.
  *
  * This script demonstrates the following:
  * 1.  Loading configuration from environment variables (`.env` file).
- * 2.  Connecting to the WebSocket server using the library's `Connection` class.
- * 3.  Logging all sent and received messages to a file (`msg001.txt`).
- * 4.  Executing a standard sequence: check version, login, enter game, and perform a game action.
+ * 2.  Using the high-level `NetworkClient` to manage connection and state.
+ * 3.  Logging all raw WebSocket traffic using the `raw_message` event.
+ * 4.  Executing a standard sequence: connect -> enter game -> perform action.
  *
  * To Run:
  * 1.  Create a `.env` file in the root directory with the following content:
@@ -18,7 +18,8 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'isomorphic-ws';
-import { Connection } from '../src/connection';
+import { NetworkClient } from '../src/main';
+import { RawMessagePayload } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.
 (global as any).WebSocket = WebSocket;
@@ -37,8 +38,8 @@ if (!WEBSOCKET_URL || !TOKEN || !GAME_CODE) {
   process.exit(1);
 }
 
-const logMessage = (direction: 'SEND' | 'RECV', data: any) => {
-  const message = typeof data === 'string' ? data : JSON.stringify(data);
+const logRawMessage = (payload: RawMessagePayload) => {
+  const { direction, message } = payload;
   const timestamp = new Date().toISOString();
   const logEntry = `[${direction}] ${timestamp}: ${message}\n\n`;
   try {
@@ -50,126 +51,76 @@ const logMessage = (direction: 'SEND' | 'RECV', data: any) => {
 
 // --- 2. Main Application Logic ---
 
-console.log(`Connecting to ${WEBSOCKET_URL}...`);
-console.log(`Logging communication to ${LOG_FILE}`);
+const main = async () => {
+  console.log(`Connecting to ${WEBSOCKET_URL}...`);
+  console.log(`Logging communication to ${LOG_FILE}`);
 
-// Clear the log file at the start.
-fs.writeFileSync(LOG_FILE, '--- WebSocket Communication Log ---\n\n');
+  // Clear the log file at the start.
+  fs.writeFileSync(LOG_FILE, '--- WebSocket Communication Log ---\n\n');
 
-const connection = new Connection(WEBSOCKET_URL);
+  const client = new NetworkClient({ url: WEBSOCKET_URL });
 
-// State variable to hold the control ID from the server.
-let ctrlid: number | null = null;
+  // Setup logging
+  client.on('raw_message', logRawMessage);
 
-const sendJson = (data: object) => {
-  const message = JSON.stringify(data);
-  logMessage('SEND', message);
-  connection.send(message);
-};
-
-connection.onOpen = () => {
-  console.log('Connection opened. Sending version check...');
-  sendJson({
-    cmdid: 'checkver',
-    nativever: 1710120,
-    scriptver: 1712260,
-    clienttype: 'web',
-    businessid: 'demo',
+  // Listen for other events
+  client.on('disconnect', payload => {
+    console.log(`Client disconnected. Reason: ${payload.reason}`);
+    process.exit(0);
   });
-};
 
-connection.onClose = event => {
-  console.log(`Connection closed. Code: ${event.code}, Reason: ${event.reason}`);
-  process.exit(0);
-};
+  client.on('error', error => {
+    console.error('An error occurred:', error);
+  });
 
-connection.onError = event => {
-  console.error('WebSocket error:', event);
-  process.exit(1);
-};
-
-connection.onMessage = event => {
-  const data = JSON.parse(event.data);
-  logMessage('RECV', data);
-
-  // The server can send a single message or an array of messages
-  const messages = Array.isArray(data) ? data : [data];
-
-  for (const msg of messages) {
-    switch (msg.msgid) {
-      case 'cmdret':
-        handleCmdRet(msg);
-        break;
-      case 'gameuserinfo':
-        // Store the critical ctrlid for the next command
-        if (msg.ctrlid) {
-          console.log(`Received game user info with new ctrlid: ${msg.ctrlid}`);
-          ctrlid = msg.ctrlid;
-        }
-        break;
-      case 'gamecfg':
-        // Received game config, now we can send a game control command.
-        console.log('Received game config. Sending game action (spin)...');
-        if (ctrlid !== null) {
-          sendJson({
-            cmdid: 'gamectrl3',
-            gameid: 101, // Example gameid, adjust if needed
-            ctrlid: ctrlid,
-            ctrlname: 'spin',
-            ctrlparam: { bet: 1, lines: 10, times: 1 },
-          });
-        } else {
-          console.error('Error: Cannot send gamectrl3, ctrlid is not set.');
-          connection.disconnect();
-        }
-        break;
-      // Add other message handlers as needed, for now we just log them.
-      default:
-        console.log(`Received message: ${msg.msgid}`);
+  client.on('message', msg => {
+    // We received an async message from the server that was not a direct response to a command
+    console.log('Received async message:', msg);
+    // In a real client, you would check msg.msgid and update game state accordingly.
+    // For this example, we're particularly interested in 'gameuserinfo' to get the ctrlid.
+    if (msg.msgid === 'gameuserinfo' && msg.ctrlid) {
+      console.log(`Ready to send game actions. Received ctrlid: ${msg.ctrlid}`);
+      // Now we can send the spin command
+      sendGameAction(msg.ctrlid);
     }
+  });
+
+  const sendGameAction = async (ctrlid: number) => {
+    try {
+      console.log('Sending game action (spin)...');
+      await client.send('gamectrl3', {
+        gameid: 101, // Example gameid, adjust if needed
+        ctrlid: ctrlid,
+        ctrlname: 'spin',
+        ctrlparam: { bet: 1, lines: 10, times: 1 },
+      });
+      console.log('Game action successful. Disconnecting.');
+      client.disconnect();
+    } catch (error) {
+      console.error('Failed to send game action:', error);
+      client.disconnect();
+    }
+  };
+
+  try {
+    // 1. Connect and log in
+    await client.connect(TOKEN);
+    console.log('Client connected and logged in successfully.');
+
+    // 2. Enter the game
+    await client.enterGame(GAME_CODE);
+    console.log(`Entered game ${GAME_CODE}. Waiting for gameuserinfo to get ctrlid...`);
+
+    // The 'message' event handler will now take over to send the game action
+    // when it receives the first gameuserinfo message with a ctrlid.
+  } catch (error) {
+    console.error('Failed during connection or entering game:', error);
+    client.disconnect();
+    process.exit(1);
   }
 };
 
-const handleCmdRet = (msg: { cmdid: string; isok: boolean }) => {
-  console.log(`Received command result for '${msg.cmdid}': ${msg.isok ? 'OK' : 'FAIL'}`);
-
-  if (!msg.isok) {
-    console.error(`Command '${msg.cmdid}' failed. Closing connection.`);
-    connection.disconnect();
-    return;
-  }
-
-  // State machine for the connection flow
-  switch (msg.cmdid) {
-    case 'checkver':
-      console.log('Version check successful. Logging in...');
-      sendJson({
-        cmdid: 'flblogin',
-        token: TOKEN,
-        language: 'en_US',
-        gamecode: GAME_CODE,
-      });
-      break;
-    case 'flblogin':
-      console.log('Login successful. Entering game...');
-      sendJson({
-        cmdid: 'comeingame3',
-        gamecode: GAME_CODE,
-        tableid: 't1',
-        isreconnect: false,
-      });
-      break;
-    case 'comeingame3':
-      console.log('Successfully entered game. Waiting for gamecfg to send spin...');
-      // The logic now waits for the 'gamecfg' message to trigger the spin.
-      break;
-    case 'gamectrl3':
-      console.log('Game action (spin) successful. Closing connection.');
-      // This is the end of our example flow.
-      setTimeout(() => connection.disconnect(), 1000); // Wait a second before disconnecting.
-      break;
-  }
-};
-
-// --- 3. Start the connection ---
-connection.connect();
+main().catch(err => {
+  console.error('An unexpected error occurred in main:', err);
+  process.exit(1);
+});

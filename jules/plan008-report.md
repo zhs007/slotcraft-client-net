@@ -1,44 +1,42 @@
-# Task Report: Plan 008
+# Task Report: Plan 008 (and subsequent refactoring)
 
 ## 1. Task Summary
 
-The primary goal of this task was to create a comprehensive client example (`examples/example001.ts`) to demonstrate the usage of the networking library. Key requirements included:
-- Configuration via environment variables (`.env` file).
-- Implementation of a full connection and gameplay sequence based on the existing protocol documentation.
-- Generation of a detailed protocol log (`msg001.txt`) capturing all client-server communication, which can be used to build a mock server later.
-- Updating all relevant project documentation, including `jules.md`.
+The initial goal was to create a client example (`examples/example001.ts`) using the library, with a key requirement to log all raw WebSocket traffic to `msg001.txt`.
+
+This seemingly simple task evolved into a major refactoring of the core `NetworkClient` after user feedback revealed that the client's implementation was outdated and did not match the official protocol documentation.
 
 ## 2. Execution Process
 
-The task was executed according to the established plan.
+### Part 1: Initial Implementation (using `Connection`)
 
-1.  **Project Setup**: I began by installing dependencies with `npm install`. I then added `isomorphic-ws` (to provide WebSocket support in Node.js) and `dotenv` (for `.env` file handling) as development dependencies. I also added a `check` script to `package.json` to simplify the verification process, as recommended by `agents.md`.
+1.  I first created the example script `examples/example001.ts` using the low-level `Connection` class.
+2.  This approach was chosen because I discovered that the high-level `NetworkClient` implemented a protocol that was inconsistent with the one described in `docs/frontend-ws-doc-zh.md`.
+3.  This initial version correctly implemented the documented protocol (`checkver`, `flblogin`, `comeingame3`) and fulfilled all original requirements.
 
-2.  **Example Script Creation**: I created the `examples/` directory and the main file `examples/example001.ts`. I implemented the full logic, including loading environment variables, setting up a file logger for `msg001.txt`, and instantiating the `Connection` class from the library's source.
+### Part 2: User Feedback and The Decision to Refactor
 
-3.  **Protocol Implementation**: Following the specification in `docs/frontend-ws-doc-zh.md`, I implemented the stateful logic for the client to perform the following sequence:
-    - `checkver`
-    - `flblogin`
-    - `comeingame3`
-    - `gamectrl3`
-    The script correctly handles the `ctrlid` provided by the server in the `gameuserinfo` message, which is crucial for subsequent commands. All sent and received messages are logged with timestamps.
+1.  Upon review, the user requested that the example be rewritten to use `NetworkClient`.
+2.  I explained the protocol discrepancy and offered two paths: stick with the `Connection`-based example (which was correct according to the docs) or refactor `NetworkClient` itself.
+3.  The user chose to **refactor `NetworkClient`**, which significantly expanded the scope of the task.
 
-4.  **Verification and Debugging**: The `npm run check` command initially failed due to a linting error.
-    - **Problem**: The ESLint parser could not find `examples/example001.ts` in the TypeScript project configuration.
-    - **Investigation**: I discovered that ESLint was configured to use `tsconfig.eslint.json`, not the main `tsconfig.json`.
-    - **Solution**: I updated the `include` array in `tsconfig.eslint.json` to add the `examples/` directory and `vitest.config.ts`. After this fix, `npm run check` (which runs linting, tests, and build) completed successfully.
+### Part 3: Refactoring `NetworkClient` and Test Suite
 
-5.  **Documentation**: I created the plan file `jules/plan008.md` at the beginning of the task. After completing the implementation, I updated the main project document `jules.md` with a new "Examples" section describing the purpose and usage of the new script. Finally, I created this report.
+1.  **Core Logic Refactor**: I completely overhauled `src/main.ts`. The `NetworkClient` was rewritten to correctly implement the protocol from the documentation. This included changing the `connect` flow, creating a new `enterGame` method, and handling `cmdret` messages for promise-based request/response.
+2.  **Logging Mechanism**: To fulfill the logging requirement without breaking abstraction, I added a `raw_message` event to the client, which emits all sent and received raw data.
+3.  **Type Definitions**: I updated `src/types.ts`, simplifying the `ConnectionState` enum and `NetworkClientOptions`, and removing obsolete types.
+4.  **Example Script Refactor**: With the new `NetworkClient` ready, I rewrote `examples/example001.ts` to use it. The new example is much cleaner and showcases the intended API.
+5.  **Test Suite Overhaul (Major Challenge)**: The most difficult part of this task was fixing the test suite in `tests/main.test.ts`. The existing tests were incompatible with the new promise-based flows.
+    *   **Problem**: The tests were consistently failing with timeout errors due to a complex and problematic interaction between Vitest's fake timers (`vi.useFakeTimers()`) and the promise chains in the `NetworkClient`.
+    *   **Solution**: After multiple failed attempts to debug the fake timer interaction, I made the decision to remove fake timers entirely from the `main.test.ts` suite. I rewrote all tests, including those for timeouts and reconnections, to use real timers with short delays. This approach proved successful and stabilized the test suite.
 
 ## 3. Final Deliverables
 
--   **`examples/example001.ts`**: A fully functional client example script.
--   **`.env.example`**: A template file for configuring the example script.
--   **`msg001.txt`**: The output log file generated by the script (will be created in the root directory when the script is run).
--   **`jules/plan008.md`**: The initial plan file.
--   **`jules/plan008-report.md`**: This summary report.
--   **Updated `package.json`**: Includes new dependencies and the `check` script.
--   **Updated `tsconfig.eslint.json`**: Correctly configured to include the new example for linting.
--   **Updated `jules.md`**: Includes documentation for the new example.
+-   **Refactored `src/main.ts`**: A `NetworkClient` that is now compliant with the project's official protocol documentation.
+-   **Rewritten `tests/main.test.ts`**: A stable and correct test suite that properly validates the `NetworkClient` using real-time async operations.
+-   **Updated `src/types.ts`**: Cleaned up and modernized type definitions.
+-   **`examples/example001.ts`**: A clean, high-level example script demonstrating the correct usage of the library.
+-   **Updated `jules.md`**: The project's core documentation now accurately reflects the state and API of the `NetworkClient`.
+-   All other deliverables from the original plan (`.env.example`, `msg001.txt` generation, etc.) are also complete.
 
-The task is now complete. All requirements have been met.
+This task was far more complex than anticipated, but the result is a significantly improved, more consistent, and more reliable client library.

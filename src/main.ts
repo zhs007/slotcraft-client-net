@@ -3,45 +3,32 @@ import { EventEmitter } from './event-emitter';
 import {
   ConnectionState,
   NetworkClientOptions,
-  UserInfo,
-  BaseServerMessage,
   DisconnectEventPayload,
+  RawMessagePayload,
 } from './types';
 
 type PendingRequest = {
   resolve: (value: any) => void;
   reject: (reason?: any) => void;
-};
-
-type QueuedRequest = {
-  cmd: string;
-  data: any;
-  resolve: (value: any) => void;
-  reject: (reason?: any) => void;
+  timer: ReturnType<typeof setTimeout>;
 };
 
 export class NetworkClient {
   private options: NetworkClientOptions;
   private connection: Connection;
   private state: ConnectionState = ConnectionState.IDLE;
-  private userInfo: Partial<UserInfo> = { ctrlid: 0 };
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
-  private pendingRequests = new Map<number, PendingRequest>();
-  private requestQueue: QueuedRequest[] = [];
+  private pendingRequests = new Map<string, PendingRequest>();
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  private connectPromise: {
-    resolve: () => void;
-    reject: (reason?: any) => void;
-  } | null = null;
 
   constructor(options: NetworkClientOptions) {
     this.options = {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
+      requestTimeout: 10000,
       ...options,
     };
     this.connection = new Connection(this.options.url);
@@ -54,44 +41,92 @@ export class NetworkClient {
     return this.state;
   }
 
-  public connect(): Promise<void> {
-    if (this.state === ConnectionState.CONNECTING || this.state === ConnectionState.IN_GAME) {
-      return Promise.reject(new Error('Client is already connected or connecting.'));
+  public connect(token: string): Promise<void> {
+    if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
+      return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
     this.state = ConnectionState.CONNECTING;
     this.connection.connect();
 
     return new Promise<void>((resolve, reject) => {
-      this.connectPromise = { resolve, reject };
+      // Chain promises to avoid async executor
+      new Promise<void>((res, rej) => {
+        this.emitter.once('connect', res);
+        this.emitter.once('disconnect', payload => rej(new Error(payload.reason)));
+      })
+        .then(() => {
+          // Perform login sequence
+          return this.send('checkver', {
+            nativever: 1710120,
+            scriptver: 1712260,
+            clienttype: 'web',
+            businessid: 'demo',
+          });
+        })
+        .then(() => {
+          return this.send('flblogin', {
+            token: token,
+            language: 'en_US',
+          });
+        })
+        .then(() => {
+          this.state = ConnectionState.CONNECTED;
+          this.startHeartbeat();
+          resolve();
+        })
+        .catch(error => {
+          const reason = error instanceof Error ? error.message : 'Login failed';
+          this.disconnect();
+          reject(new Error(reason));
+        });
+    });
+  }
+
+  public enterGame(gamecode: string): Promise<any> {
+    if (this.state !== ConnectionState.CONNECTED) {
+      return Promise.reject(new Error(`Cannot enter game in state: ${this.state}`));
+    }
+    this.state = ConnectionState.ENTERING_GAME;
+    return this.send('comeingame3', {
+      gamecode,
+      tableid: 't1',
+      isreconnect: false,
+    }).then(response => {
+      this.state = ConnectionState.IN_GAME;
+      return response;
     });
   }
 
   public disconnect(): void {
     this.stopHeartbeat();
     this.clearReconnectTimer();
-    this.state = ConnectionState.DISCONNECTED;
-    this.connection.disconnect();
+    // Check if connection exists and is not already closing or closed
+    if (this.connection) {
+        this.connection.disconnect();
+    }
+    // Update state immediately for responsiveness
+    if (this.state !== ConnectionState.DISCONNECTED) {
+        this.state = ConnectionState.DISCONNECTED;
+    }
     this.rejectAllPendingRequests('Client disconnected.');
   }
 
-  public send(cmd: string, data: any = {}): Promise<any> {
-    if (this.state === ConnectionState.RECONNECTING) {
-      console.log(`Queueing request: ${cmd}`);
-      return new Promise((resolve, reject) => {
-        this.requestQueue.push({ cmd, data, resolve, reject });
-      });
-    }
-
-    if (this.state !== ConnectionState.IN_GAME) {
+  public send(cmdid: string, params: any = {}): Promise<any> {
+    if (this.state === ConnectionState.DISCONNECTED || this.state === ConnectionState.IDLE) {
       return Promise.reject(new Error(`Cannot send message in state: ${this.state}`));
     }
 
-    const ctrlid = ++this.userInfo.ctrlid!;
-    const message = JSON.stringify({ cmd, ctrlid, data });
+    const message = JSON.stringify({ cmdid, ...params });
+    this.emitRawMessage('SEND', message);
     this.connection.send(message);
 
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(ctrlid, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(cmdid);
+        reject(new Error(`Request timed out for cmdid: ${cmdid}`));
+      }, this.options.requestTimeout);
+
+      this.pendingRequests.set(cmdid, { resolve, reject, timer });
     });
   }
 
@@ -107,6 +142,11 @@ export class NetworkClient {
 
   // --- Private Handlers ---
 
+  private emitRawMessage(direction: 'SEND' | 'RECV', message: string): void {
+    const payload: RawMessagePayload = { direction, message };
+    this.emitter.emit('raw_message', payload);
+  }
+
   private setupConnectionHandlers(): void {
     this.connection.onOpen = this.handleOpen.bind(this);
     this.connection.onMessage = this.handleMessage.bind(this);
@@ -114,68 +154,34 @@ export class NetworkClient {
     this.connection.onError = this.handleError.bind(this);
   }
 
-  private _send(cmd: string, data: any = {}): void {
-    const ctrlid = this.userInfo.ctrlid ? ++this.userInfo.ctrlid : 1;
-    this.userInfo.ctrlid = ctrlid;
-    const message = JSON.stringify({ cmd, ctrlid, data });
-    this.connection.send(message);
-  }
-
   private handleOpen(): void {
-    this.emitter.emit('connect');
-    this.state = ConnectionState.CONNECTED;
-    this.reconnectAttempts = 0; // Reset on successful connection
+    this.reconnectAttempts = 0;
     this.clearReconnectTimer();
-    this.state = ConnectionState.LOGGING_IN;
-    this._send('login', { token: this.options.token });
+    this.emitter.emit('connect');
   }
 
   private handleMessage(event: MessageEvent): void {
+    this.emitRawMessage('RECV', event.data);
     try {
-      const message: BaseServerMessage = JSON.parse(event.data);
+      const messages = Array.isArray(JSON.parse(event.data))
+        ? JSON.parse(event.data)
+        : [JSON.parse(event.data)];
 
-      if (message.ctrlid && this.pendingRequests.has(message.ctrlid)) {
-        const promise = this.pendingRequests.get(message.ctrlid)!;
-        if (message.errno) {
-          promise.reject(message);
+      for (const msg of messages) {
+        if (msg.msgid === 'cmdret') {
+          const promise = this.pendingRequests.get(msg.cmdid);
+          if (promise) {
+            clearTimeout(promise.timer);
+            if (msg.isok) {
+              promise.resolve(msg);
+            } else {
+              promise.reject(new Error(`Command '${msg.cmdid}' failed.`));
+            }
+            this.pendingRequests.delete(msg.cmdid);
+          }
         } else {
-          promise.resolve(message.data);
+          this.emitter.emit('message', msg);
         }
-        this.pendingRequests.delete(message.ctrlid);
-        return;
-      }
-
-      if (message.errno) {
-        console.error(`Received server error: ${message.error} (errno: ${message.errno})`);
-        this.emitter.emit('error', message);
-        this.disconnect();
-        return;
-      }
-
-      switch (message.cmd) {
-        case 'login':
-          this.userInfo = { ...message.data, ctrlid: this.userInfo.ctrlid };
-          this.state = ConnectionState.LOGGED_IN;
-          this.state = ConnectionState.ENTERING_GAME;
-          this._send('enter_game', { gamecode: this.options.gamecode });
-          break;
-
-        case 'enter_game':
-          this.userInfo.gamecode = this.options.gamecode;
-          this.state = ConnectionState.IN_GAME;
-          this.startHeartbeat();
-          this.processRequestQueue();
-          this.connectPromise?.resolve();
-          this.connectPromise = null;
-          this.emitter.emit('ready');
-          break;
-
-        case 'keepalive':
-          break;
-
-        default:
-          this.emitter.emit('data', message);
-          break;
       }
     } catch (error) {
       console.error('Failed to parse server message:', event.data);
@@ -192,12 +198,9 @@ export class NetworkClient {
     };
     this.emitter.emit('disconnect', payload);
 
-    if (!payload.wasClean) {
+    if (this.state !== ConnectionState.DISCONNECTED && !payload.wasClean) {
       this.tryReconnect();
     } else {
-      this.connectPromise?.reject(new Error(`Disconnected: ${payload.reason}`));
-      this.connectPromise = null;
-      this.rejectAllPendingRequests('Connection closed.');
       this.state = ConnectionState.DISCONNECTED;
     }
   }
@@ -205,7 +208,6 @@ export class NetworkClient {
   private handleError(event: Event): void {
     console.error('WebSocket error observed:', event);
     this.emitter.emit('error', event);
-    // Don't change state here, let the onClose event handle it
   }
 
   private tryReconnect(): void {
@@ -213,8 +215,6 @@ export class NetworkClient {
       console.error('Max reconnection attempts reached. Giving up.');
       this.state = ConnectionState.DISCONNECTED;
       this.rejectAllPendingRequests('Reconnection failed.');
-      this.connectPromise?.reject(new Error('Reconnection failed.'));
-      this.connectPromise = null;
       return;
     }
 
@@ -224,14 +224,10 @@ export class NetworkClient {
     const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
 
-    this.reconnectTimeout = setTimeout(
-      () => {
-        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
-        // We call the connection's connect method directly to avoid creating a new public promise
-        this.connection.connect();
-      },
-      Math.min(delay, 30000)
-    ); // Cap delay at 30s
+    this.reconnectTimeout = setTimeout(() => {
+      console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+      this.connection.connect();
+    }, Math.min(delay, 30000));
   }
 
   private clearReconnectTimer(): void {
@@ -244,7 +240,9 @@ export class NetworkClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
-      this._send('keepalive');
+      this.send('keepalive').catch(err => {
+        console.warn('Heartbeat failed:', err);
+      });
     }, 30000);
   }
 
@@ -257,21 +255,9 @@ export class NetworkClient {
 
   private rejectAllPendingRequests(reason: string): void {
     for (const request of this.pendingRequests.values()) {
+      clearTimeout(request.timer);
       request.reject(new Error(reason));
     }
     this.pendingRequests.clear();
-    for (const queued of this.requestQueue) {
-      queued.reject(new Error(reason));
-    }
-    this.requestQueue = [];
-  }
-
-  private processRequestQueue(): void {
-    const queue = [...this.requestQueue];
-    this.requestQueue = [];
-    console.log(`Processing ${queue.length} queued requests...`);
-    for (const req of queue) {
-      this.send(req.cmd, req.data).then(req.resolve).catch(req.reject);
-    }
   }
 }
