@@ -75,7 +75,7 @@ export class NetworkClient {
       // Chain promises to avoid async executor
       new Promise<void>((res, rej) => {
         this.emitter.once('connect', res);
-        this.emitter.once('disconnect', payload => rej(new Error(payload.reason)));
+        this.emitter.once('disconnect', (payload) => rej(new Error(payload.reason)));
       })
         .then(() => {
           return this.send('flblogin', {
@@ -88,7 +88,7 @@ export class NetworkClient {
           this.startHeartbeat();
           resolve();
         })
-        .catch(error => {
+        .catch((error) => {
           const reason = error instanceof Error ? error.message : 'Login failed';
           this.disconnect();
           reject(new Error(reason));
@@ -107,7 +107,7 @@ export class NetworkClient {
       gamecode,
       tableid: '',
       isreconnect: false,
-    }).then(response => {
+    }).then((response) => {
       this.setState(ConnectionState.IN_GAME);
       return response;
     });
@@ -139,7 +139,9 @@ export class NetworkClient {
     // Validate bet against allowed linebets when available
     if (typeof bet === 'number' && Array.isArray(this.userInfo.linebets)) {
       if (!this.userInfo.linebets.includes(bet)) {
-        return Promise.reject(new Error(`Invalid bet ${bet}. Allowed: [${this.userInfo.linebets.join(',')}]`));
+        return Promise.reject(
+          new Error(`Invalid bet ${bet}. Allowed: [${this.userInfo.linebets.join(',')}]`)
+        );
       }
     }
     if (bet == null) {
@@ -197,12 +199,12 @@ export class NetworkClient {
       p = p.then(() => this.send('collect', { gameid, playIndex: i }));
     }
     return p
-      .then(res => {
+      .then((res) => {
         // Only on success transition back to IN_GAME
         this.setState(ConnectionState.IN_GAME);
         return res;
       })
-      .catch(err => {
+      .catch((err) => {
         // Stay around SPINEND for retry on failure
         this.setState(ConnectionState.SPINEND);
         throw err;
@@ -328,14 +330,33 @@ export class NetworkClient {
         const g = msg.gmi || {};
         // Cache full gmi snapshot
         this.userInfo.lastGMI = g;
-        const playIndex = (typeof msg.playIndex === 'number') ? msg.playIndex : (typeof g.playIndex === 'number' ? g.playIndex : undefined);
+        const playIndex =
+          typeof msg.playIndex === 'number'
+            ? msg.playIndex
+            : typeof g.playIndex === 'number'
+              ? g.playIndex
+              : undefined;
         if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
-        const playwin = (typeof msg.playwin === 'number') ? msg.playwin : (typeof g.playwin === 'number' ? g.playwin : undefined);
-        const totalwin = (typeof msg.totalwin === 'number') ? msg.totalwin : (typeof g.totalwin === 'number' ? g.totalwin : undefined);
+        const playwin =
+          typeof msg.playwin === 'number'
+            ? msg.playwin
+            : typeof g.playwin === 'number'
+              ? g.playwin
+              : undefined;
+        const totalwin =
+          typeof msg.totalwin === 'number'
+            ? msg.totalwin
+            : typeof g.totalwin === 'number'
+              ? g.totalwin
+              : undefined;
         if (typeof playwin === 'number') this.userInfo.lastPlayWin = playwin;
         if (typeof totalwin === 'number') this.userInfo.lastTotalWin = totalwin;
         // results length
-        const resultsArr = Array.isArray(g.replyPlay?.results) ? g.replyPlay.results : (Array.isArray(msg.results) ? msg.results : undefined);
+        const resultsArr = Array.isArray(g.replyPlay?.results)
+          ? g.replyPlay.results
+          : Array.isArray(msg.results)
+            ? msg.results
+            : undefined;
         if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
         // If currently in SPINNING, transition to SPINEND immediately (real servers may push gmi before cmdret)
         if (this.state === ConnectionState.SPINNING) {
@@ -356,7 +377,8 @@ export class NetworkClient {
         break;
       }
       case 'gamecfg': {
-        if (typeof msg.defaultLinebet === 'number') this.userInfo.defaultLinebet = msg.defaultLinebet;
+        if (typeof msg.defaultLinebet === 'number')
+          this.userInfo.defaultLinebet = msg.defaultLinebet;
         if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
         if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
         if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
@@ -366,8 +388,8 @@ export class NetworkClient {
             // If no explicit bets array for lines, derive from gamecfgData keys
             if (!Array.isArray((msg as any).bets) && this.userInfo.gamecfgData) {
               const keys = Object.keys(this.userInfo.gamecfgData)
-                .map(k => Number(k))
-                .filter(n => Number.isFinite(n));
+                .map((k) => Number(k))
+                .filter((n) => Number.isFinite(n));
               if (keys.length) this.userInfo.linesOptions = keys.sort((a, b) => a - b);
             }
           } catch {
@@ -429,10 +451,13 @@ export class NetworkClient {
     const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
 
-    this.reconnectTimeout = setTimeout(() => {
-      console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
-      this.connection.connect();
-    }, Math.min(delay, 30000));
+    this.reconnectTimeout = setTimeout(
+      () => {
+        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+        this.connection.connect();
+      },
+      Math.min(delay, 30000)
+    );
   }
 
   private clearReconnectTimer(): void {
@@ -445,7 +470,7 @@ export class NetworkClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
-      this.send('keepalive').catch(err => {
+      this.send('keepalive').catch((err) => {
         console.warn('Heartbeat failed:', err);
       });
     }, 30000);

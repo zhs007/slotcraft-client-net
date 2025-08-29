@@ -117,19 +117,20 @@
   - 响应：`keepaliveret` + `cmdret`
 
 // 已弃用：checkver（版本校验）
-  - 必填：`nativever` `scriptver` `clienttype` `businessid`
-  - 请求示例：
-    ```json
-    {
-  // 已弃用："cmdid": "checkver",
-      "nativever": 1710120,
-      "scriptver": 1712260,
-      "clienttype": "web",
-      "businessid": "demo"
-    }
-    ```
-  - 成功：`verinfo { isok:true }` + `cmdret{isok:true}`
-  - 失败：`noticemsg2{ msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
+
+- 必填：`nativever` `scriptver` `clienttype` `businessid`
+- 请求示例：
+  ```json
+  {
+    // 已弃用："cmdid": "checkver",
+    "nativever": 1710120,
+    "scriptver": 1712260,
+    "clienttype": "web",
+    "businessid": "demo"
+  }
+  ```
+- 成功：`verinfo { isok:true }` + `cmdret{isok:true}`
+- 失败：`noticemsg2{ msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
 
 - flblogin（平台登录）
   - 必填：`token` `language`（如 `en_US`）

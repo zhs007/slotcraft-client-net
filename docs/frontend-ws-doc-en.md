@@ -117,19 +117,20 @@ Each request is a JSON object with at least `cmdid`. Besides business messages, 
   - Response: `keepaliveret` + `cmdret`
 
 // Deprecated: checkver (version check)
-  - Required: `nativever`, `scriptver`, `clienttype`, `businessid`
-  - Example:
-    ```json
-    {
-  // Deprecated: "cmdid": "checkver",
-      "nativever": 1710120,
-      "scriptver": 1712260,
-      "clienttype": "web",
-      "businessid": "demo"
-    }
-    ```
-  - Success: `verinfo { isok:true }` + `cmdret{isok:true}`
-  - Failure: `noticemsg2 { msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
+
+- Required: `nativever`, `scriptver`, `clienttype`, `businessid`
+- Example:
+  ```json
+  {
+    // Deprecated: "cmdid": "checkver",
+    "nativever": 1710120,
+    "scriptver": 1712260,
+    "clienttype": "web",
+    "businessid": "demo"
+  }
+  ```
+- Success: `verinfo { isok:true }` + `cmdret{isok:true}`
+- Failure: `noticemsg2 { msgcode:108(EC_APP_NEED_UPD), type:ENDING }` + `cmdret{isok:false}`
 
 - flblogin (platform login)
   - Required: `token`, `language` (e.g., `en_US`)

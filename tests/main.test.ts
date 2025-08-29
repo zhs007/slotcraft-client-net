@@ -7,7 +7,7 @@ import { ConnectionState, NetworkClientOptions } from '../src/types';
 vi.mock('../src/connection');
 
 // Helper to introduce a small delay for async operations to complete
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('NetworkClient (Real Timers)', () => {
   let client: NetworkClient;
@@ -49,7 +49,7 @@ describe('NetworkClient (Real Timers)', () => {
       await sleep(1);
       mockConnection.onOpen?.();
 
-  await simulateCmdRet('flblogin');
+      await simulateCmdRet('flblogin');
 
       await expect(connectPromise).resolves.toBeUndefined();
       expect(client.getState()).toBe(ConnectionState.CONNECTED);
@@ -59,9 +59,9 @@ describe('NetworkClient (Real Timers)', () => {
       const connectPromise = client.connect(TEST_TOKEN);
       await sleep(1);
       mockConnection.onOpen?.();
-  await simulateCmdRet('flblogin', false); // Simulate failure
+      await simulateCmdRet('flblogin', false); // Simulate failure
 
-  await expect(connectPromise).rejects.toThrow("Command 'flblogin' failed.");
+      await expect(connectPromise).rejects.toThrow("Command 'flblogin' failed.");
       expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
     });
   });
@@ -71,7 +71,7 @@ describe('NetworkClient (Real Timers)', () => {
       const connectPromise = client.connect(TEST_TOKEN);
       await sleep(1);
       mockConnection.onOpen?.();
-  await simulateCmdRet('flblogin');
+      await simulateCmdRet('flblogin');
       await connectPromise;
     });
 
@@ -107,8 +107,16 @@ describe('NetworkClient (Real Timers)', () => {
 
       // Push gamemoduleinfo for gameid
       await pushMsg({ msgid: 'gamemoduleinfo', gamemodulename: 'g', gameid: 42, gmi: {} });
-  // Push gamecfg for bets
-  await pushMsg({ msgid: 'gamecfg', defaultLinebet: 5, linebets: [1, 2, 5, 10], ver: 'v0.1', coreVer: 'v0.1', data: '{"foo":123}', bets: [25, 50] });
+      // Push gamecfg for bets
+      await pushMsg({
+        msgid: 'gamecfg',
+        defaultLinebet: 5,
+        linebets: [1, 2, 5, 10],
+        ver: 'v0.1',
+        coreVer: 'v0.1',
+        data: '{"foo":123}',
+        bets: [25, 50],
+      });
       // Push gameuserinfo for ctrlid
       await pushMsg({ msgid: 'gameuserinfo', lastctrlid: 1, ctrlid: 2, playerState: {} });
 
@@ -119,13 +127,13 @@ describe('NetworkClient (Real Timers)', () => {
       expect(info.currency).toBe('EUR');
       expect(info.jurisdiction).toBe('MT');
       expect(info.gameid).toBe(42);
-  expect(info.ctrlid).toBe(2);
-  expect(info.defaultLinebet).toBe(5);
-  expect(info.linebets).toEqual([1, 2, 5, 10]);
-  expect(info.gamecfgVer).toBe('v0.1');
-  expect(info.gamecfgCoreVer).toBe('v0.1');
-  expect(info.gamecfgData).toEqual({ foo: 123 });
-  expect(info.linesOptions).toEqual([25, 50]);
+      expect(info.ctrlid).toBe(2);
+      expect(info.defaultLinebet).toBe(5);
+      expect(info.linebets).toEqual([1, 2, 5, 10]);
+      expect(info.gamecfgVer).toBe('v0.1');
+      expect(info.gamecfgCoreVer).toBe('v0.1');
+      expect(info.gamecfgData).toEqual({ foo: 123 });
+      expect(info.linesOptions).toEqual([25, 50]);
 
       // Call spin, expect a gamectrl3 cmd sent and then resolve on cmdret
       const spinPromise = client.spin({ bet: 5, lines: 10 });
@@ -145,17 +153,27 @@ describe('NetworkClient (Real Timers)', () => {
       await pushMsg({ msgid: 'gamecfg', defaultLinebet: 2, linebets: [1, 2, 5] });
       await pushMsg({ msgid: 'gameuserinfo', lastctrlid: 1, ctrlid: 9, playerState: {} });
 
-  // Provide lines options to allow defaulting lines
-  await pushMsg({ msgid: 'gamecfg', defaultLinebet: 2, linebets: [1, 2, 5], data: '{"25":{}}', bets: [25, 50] });
-  // Without bet -> defaults to 2; lines omitted -> defaults to min(bets)=25
-  const spinDefault = client.spin({});
-  await simulateCmdRet('gamectrl3');
-  // Simulate spin-end with no win so we return to IN_GAME
-  await pushMsg({ msgid: 'gamemoduleinfo', gameid: 7, gmi: { totalwin: 0, replyPlay: { results: [] } } });
-  await expect(spinDefault).resolves.toBeDefined();
+      // Provide lines options to allow defaulting lines
+      await pushMsg({
+        msgid: 'gamecfg',
+        defaultLinebet: 2,
+        linebets: [1, 2, 5],
+        data: '{"25":{}}',
+        bets: [25, 50],
+      });
+      // Without bet -> defaults to 2; lines omitted -> defaults to min(bets)=25
+      const spinDefault = client.spin({});
+      await simulateCmdRet('gamectrl3');
+      // Simulate spin-end with no win so we return to IN_GAME
+      await pushMsg({
+        msgid: 'gamemoduleinfo',
+        gameid: 7,
+        gmi: { totalwin: 0, replyPlay: { results: [] } },
+      });
+      await expect(spinDefault).resolves.toBeDefined();
 
-  // Invalid bet -> reject (now that we are back in IN_GAME)
-  await expect(client.spin({ bet: 3, lines: 10 })).rejects.toThrow('Invalid bet 3');
+      // Invalid bet -> reject (now that we are back in IN_GAME)
+      await expect(client.spin({ bet: 3, lines: 10 })).rejects.toThrow('Invalid bet 3');
     });
 
     it('should cache and update playerState from gameuserinfo', async () => {
@@ -171,7 +189,6 @@ describe('NetworkClient (Real Timers)', () => {
       await pushMsg({ msgid: 'gameuserinfo', lastctrlid: 11, ctrlid: 12, playerState: { b: 2 } });
       expect(client.getUserInfo().playerState).toEqual({ b: 2 });
     });
-
 
     it('send() should resolve on success', async () => {
       const sendPromise = client.send('any_cmd');
@@ -227,7 +244,13 @@ describe('NetworkClient (Real Timers)', () => {
       await egPromise;
       // Provide ctrlid and config to allow spin
       await pushMsg({ msgid: 'gamemoduleinfo', gamemodulename: 'g', gameid: 99, gmi: {} });
-      await pushMsg({ msgid: 'gamecfg', defaultLinebet: 1, linebets: [1, 2], data: '{"25":{}}', bets: [25] });
+      await pushMsg({
+        msgid: 'gamecfg',
+        defaultLinebet: 1,
+        linebets: [1, 2],
+        data: '{"25":{}}',
+        bets: [25],
+      });
       await pushMsg({ msgid: 'gameuserinfo', lastctrlid: 0, ctrlid: 1, playerState: {} });
 
       const stateEvents: any[] = [];
@@ -243,13 +266,17 @@ describe('NetworkClient (Real Timers)', () => {
       await pushMsg({ msgid: 'gamemoduleinfo', gameid: 99, gmi });
 
       // Find an event where current is SPINEND and has data.gmi
-      const spinendEvt = stateEvents.find(e => e.current === 'SPINEND' && e.data && e.data.gmi);
+      const spinendEvt = stateEvents.find((e) => e.current === 'SPINEND' && e.data && e.data.gmi);
       expect(spinendEvt).toBeDefined();
       expect(spinendEvt.data.gmi).toEqual(gmi);
       expect(client.getUserInfo().lastGMI).toEqual(gmi);
 
       // Now simulate game calling collect to end
-      await pushMsg({ msgid: 'gamemoduleinfo', gameid: 99, gmi: { totalwin: 0, replyPlay: { results: [] } } });
+      await pushMsg({
+        msgid: 'gamemoduleinfo',
+        gameid: 99,
+        gmi: { totalwin: 0, replyPlay: { results: [] } },
+      });
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
@@ -260,7 +287,13 @@ describe('NetworkClient (Real Timers)', () => {
       await egPromise;
       // Provide basics
       await pushMsg({ msgid: 'gamemoduleinfo', gamemodulename: 'g', gameid: 5, gmi: {} });
-      await pushMsg({ msgid: 'gamecfg', defaultLinebet: 1, linebets: [1, 2], data: '{"25":{}}', bets: [25] });
+      await pushMsg({
+        msgid: 'gamecfg',
+        defaultLinebet: 1,
+        linebets: [1, 2],
+        data: '{"25":{}}',
+        bets: [25],
+      });
       await pushMsg({ msgid: 'gameuserinfo', lastctrlid: 0, ctrlid: 1, playerState: {} });
 
       const evtSpy = vi.fn();
@@ -270,13 +303,17 @@ describe('NetworkClient (Real Timers)', () => {
       const spinP = client.spin({});
       expect(client.getState()).toBe(ConnectionState.SPINNING);
       // Push GMI now with no win -> should transition back to IN_GAME
-      await pushMsg({ msgid: 'gamemoduleinfo', gameid: 5, gmi: { totalwin: 0, replyPlay: { results: [] } } });
+      await pushMsg({
+        msgid: 'gamemoduleinfo',
+        gameid: 5,
+        gmi: { totalwin: 0, replyPlay: { results: [] } },
+      });
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
       // Now deliver cmdret to resolve the promise
       await simulateCmdRet('gamectrl3');
       await expect(spinP).resolves.toBeDefined();
       // Validate we saw SPINNING -> SPINEND (with data) -> IN_GAME sequence
-      const currents = evtSpy.mock.calls.map(c => c[0].current);
+      const currents = evtSpy.mock.calls.map((c) => c[0].current);
       expect(currents).toContain('SPINNING');
       expect(currents).toContain('SPINEND');
       expect(currents[currents.length - 1]).toBe('IN_GAME');

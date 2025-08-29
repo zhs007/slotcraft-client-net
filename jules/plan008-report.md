@@ -27,16 +27,16 @@ This seemingly simple task evolved into a major refactoring of the core `Network
 3.  **Type Definitions**: I updated `src/types.ts`, simplifying the `ConnectionState` enum and `NetworkClientOptions`, and removing obsolete types.
 4.  **Example Script Refactor**: With the new `NetworkClient` ready, I rewrote `examples/example001.ts` to use it. The new example is much cleaner and showcases the intended API.
 5.  **Test Suite Overhaul (Major Challenge)**: The most difficult part of this task was fixing the test suite in `tests/main.test.ts`. The existing tests were incompatible with the new promise-based flows.
-    *   **Problem**: The tests were consistently failing with timeout errors due to a complex and problematic interaction between Vitest's fake timers (`vi.useFakeTimers()`) and the promise chains in the `NetworkClient`.
-    *   **Solution**: After multiple failed attempts to debug the fake timer interaction, I made the decision to remove fake timers entirely from the `main.test.ts` suite. I rewrote all tests, including those for timeouts and reconnections, to use real timers with short delays. This approach proved successful and stabilized the test suite.
+    - **Problem**: The tests were consistently failing with timeout errors due to a complex and problematic interaction between Vitest's fake timers (`vi.useFakeTimers()`) and the promise chains in the `NetworkClient`.
+    - **Solution**: After multiple failed attempts to debug the fake timer interaction, I made the decision to remove fake timers entirely from the `main.test.ts` suite. I rewrote all tests, including those for timeouts and reconnections, to use real timers with short delays. This approach proved successful and stabilized the test suite.
 
 ## 3. Final Deliverables
 
--   **Refactored `src/main.ts`**: A `NetworkClient` that is now compliant with the project's official protocol documentation.
--   **Rewritten `tests/main.test.ts`**: A stable and correct test suite that properly validates the `NetworkClient` using real-time async operations.
--   **Updated `src/types.ts`**: Cleaned up and modernized type definitions.
--   **`examples/example001.ts`**: A clean, high-level example script demonstrating the correct usage of the library.
--   **Updated `jules.md`**: The project's core documentation now accurately reflects the state and API of the `NetworkClient`.
--   All other deliverables from the original plan (`.env.example`, `msg001.txt` generation, etc.) are also complete.
+- **Refactored `src/main.ts`**: A `NetworkClient` that is now compliant with the project's official protocol documentation.
+- **Rewritten `tests/main.test.ts`**: A stable and correct test suite that properly validates the `NetworkClient` using real-time async operations.
+- **Updated `src/types.ts`**: Cleaned up and modernized type definitions.
+- **`examples/example001.ts`**: A clean, high-level example script demonstrating the correct usage of the library.
+- **Updated `jules.md`**: The project's core documentation now accurately reflects the state and API of the `NetworkClient`.
+- All other deliverables from the original plan (`.env.example`, `msg001.txt` generation, etc.) are also complete.
 
 This task was far more complex than anticipated, but the result is a significantly improved, more consistent, and more reliable client library.

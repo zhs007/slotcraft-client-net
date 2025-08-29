@@ -64,17 +64,17 @@ const main = async () => {
   client.on('raw_message', logRawMessage);
 
   // Listen for other events
-  client.on('disconnect', payload => {
+  client.on('disconnect', (payload) => {
     console.log(`Client disconnected. Reason: ${payload.reason}`);
     process.exit(0);
   });
 
-  client.on('error', error => {
+  client.on('error', (error) => {
     console.error('An error occurred:', error);
   });
 
   // Persistently log messages only, and print parsed gamecfg data if available
-  client.on('message', msg => {
+  client.on('message', (msg) => {
     console.log('Received async message:', msg);
     if (msg?.msgid === 'gamecfg' && typeof msg.data === 'string') {
       try {
@@ -100,30 +100,17 @@ const main = async () => {
   };
   client.on('state', onState as any);
 
-  // Wait until linesOptions are available from gamecfg
-  const waitForLinesOptions = async (): Promise<number[]> => {
-    const get = () => client.getUserInfo().linesOptions;
-    const existing = get();
-    if (existing && existing.length) return existing;
-    return new Promise<number[]>((resolve) => {
-      const handler = (msg: any) => {
-        if (msg?.msgid === 'gamecfg') {
-          const opts = get();
-          if (opts && opts.length) {
-            client.off('message', handler);
-            resolve(opts);
-          }
-        }
-      };
-      client.on('message', handler);
-    });
-  };
-
   const spinAcrossLines = async () => {
     try {
-      const opts = await waitForLinesOptions();
+      // Already IN_GAME: read linesOptions directly
+      const opts = client.getUserInfo().linesOptions || [];
+      if (!opts.length) {
+        console.warn('No linesOptions available after entering IN_GAME; skipping spins.');
+        client.disconnect();
+        return;
+      }
       console.log('Starting sequential spins over lines options:', opts);
-  // spin() now returns the latest GMI summary at cmdret
+      // spin() now returns the latest GMI summary at cmdret
 
       for (const lines of opts) {
         console.log(`--- Lines=${lines} ---`);
@@ -133,10 +120,12 @@ const main = async () => {
         while (!(seenWin && seenLose) && attempts < 50) {
           attempts++;
           console.log(`Spin #${attempts} with lines=${lines}...`);
-          const { totalwin, results } = await client.spin({ lines }) as any;
+          const { totalwin, results } = (await client.spin({ lines })) as any;
           if (totalwin > 0) {
             seenWin = true;
-            console.log(`Win detected. totalwin=${totalwin}, results=${results}. Will collect to continue...`);
+            console.log(
+              `Win detected. totalwin=${totalwin}, results=${results}. Will collect to continue...`
+            );
             try {
               // Collect sequence: client.collect() derives playIndex plan (pre + final) if needed
               await client.collect();
@@ -152,7 +141,9 @@ const main = async () => {
           // spin already waited for cmdret and returned the summarized result
         }
         if (!(seenWin && seenLose)) {
-          console.warn(`Stopping early on lines=${lines} after ${attempts} attempts (did not observe both win and no-win).`);
+          console.warn(
+            `Stopping early on lines=${lines} after ${attempts} attempts (did not observe both win and no-win).`
+          );
         }
       }
       console.log('Finished spinning across all lines. Disconnecting.');
@@ -170,7 +161,7 @@ const main = async () => {
 
     // 2. Enter the game
     await client.enterGame(GAME_CODE);
-  console.log(`Entered game ${GAME_CODE}. Waiting until fully IN_GAME to send spin...`);
+    console.log(`Entered game ${GAME_CODE}. Waiting until fully IN_GAME to send spin...`);
 
     // The 'message' event handler will now take over to send the game action
     // when it receives the first gameuserinfo message with a ctrlid.
@@ -181,7 +172,7 @@ const main = async () => {
   }
 };
 
-main().catch(err => {
+main().catch((err) => {
   console.error('An unexpected error occurred in main:', err);
   process.exit(1);
 });
