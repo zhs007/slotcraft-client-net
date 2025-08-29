@@ -2,8 +2,8 @@
   "name": "slotcraft-client-net",
   "version": "1.0.0",
   "description": "A lightweight and reliable frontend network library for WebSocket communication.",
-  "main": "dist/main.js",
-  "types": "dist/main.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
     "dist",
     "docs"

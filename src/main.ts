@@ -7,7 +7,14 @@ import {
   RawMessagePayload,
   UserInfo,
   SpinParams,
+  Logger,
 } from './types';
+
+const noOpLogger: Logger = {
+  log: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
 type PendingRequest = {
   resolve: (value: any) => void;
@@ -22,6 +29,7 @@ export class SlotcraftClient {
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
   private pendingRequests = new Map<string, PendingRequest>();
+  private logger: Logger;
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -32,9 +40,17 @@ export class SlotcraftClient {
       maxReconnectAttempts: 10,
       reconnectDelay: 1000,
       requestTimeout: 10000,
+      logger: console,
       ...options,
     };
     this.connection = new Connection(this.options.url);
+
+    if (this.options.logger === false) {
+      this.logger = noOpLogger;
+    } else {
+      this.logger = this.options.logger!;
+    }
+
     this.setupConnectionHandlers();
   }
 
@@ -75,7 +91,9 @@ export class SlotcraftClient {
       // Chain promises to avoid async executor
       new Promise<void>((res, rej) => {
         this.emitter.once('connect', res);
-        this.emitter.once('disconnect', (payload) => rej(new Error(payload.reason)));
+        this.emitter.once('disconnect', (payload) =>
+          rej(new Error(payload?.reason ?? 'Connection closed during login'))
+        );
       })
         .then(() => {
           return this.send('flblogin', {
@@ -83,8 +101,9 @@ export class SlotcraftClient {
             language: 'en_US',
           });
         })
-        .then(() => {
+        .then((response) => {
           this.setState(ConnectionState.CONNECTED);
+          this.emitter.emit('login', response);
           this.startHeartbeat();
           resolve();
         })
@@ -109,6 +128,7 @@ export class SlotcraftClient {
       isreconnect: false,
     }).then((response) => {
       this.setState(ConnectionState.IN_GAME);
+      this.emitter.emit('enter_game', response);
       return response;
     });
   }
@@ -328,7 +348,7 @@ export class SlotcraftClient {
         }
       }
     } catch (error) {
-      console.error('Failed to parse server message:', event.data);
+      this.logger.error('Failed to parse server message:', event.data);
       this.emitter.emit('error', new Error('Failed to parse server message'));
     }
   }
@@ -444,13 +464,13 @@ export class SlotcraftClient {
   }
 
   private handleError(event: Event): void {
-    console.error('WebSocket error observed:', event);
+    this.logger.error('WebSocket error observed:', event);
     this.emitter.emit('error', event);
   }
 
   private tryReconnect(): void {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
-      console.error('Max reconnection attempts reached. Giving up.');
+      this.logger.error('Max reconnection attempts reached. Giving up.');
       this.setState(ConnectionState.DISCONNECTED);
       this.rejectAllPendingRequests('Reconnection failed.');
       return;
@@ -464,7 +484,7 @@ export class SlotcraftClient {
 
     this.reconnectTimeout = setTimeout(
       () => {
-        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+        this.logger.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
         this.connection.connect();
       },
       Math.min(delay, 30000)
@@ -482,7 +502,7 @@ export class SlotcraftClient {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
       this.send('keepalive').catch((err) => {
-        console.warn('Heartbeat failed:', err);
+        this.logger.warn('Heartbeat failed:', err);
       });
     }, 30000);
   }

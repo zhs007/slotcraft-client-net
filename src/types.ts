@@ -40,6 +40,22 @@ export interface SlotcraftClientOptions {
   reconnectDelay?: number;
   /** Optional: Timeout for a single request in ms. Defaults to 10000. */
   requestTimeout?: number;
+  /**
+   * Optional: Custom logger implementation.
+   * Set to `false` to disable all logging.
+   * Defaults to the global `console` object.
+   */
+  logger?: Logger | false;
+}
+
+/**
+ * Interface for a logger that can be passed to the client.
+ * Compatible with the standard `console` object.
+ */
+export interface Logger {
+  log(message?: any, ...optionalParams: any[]): void;
+  warn(message?: any, ...optionalParams: any[]): void;
+  error(message?: any, ...optionalParams: any[]): void;
 }
 
 /**

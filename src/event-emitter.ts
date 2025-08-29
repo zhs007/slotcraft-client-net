@@ -6,6 +6,7 @@ import { EventCallback } from './types';
 
 export class EventEmitter {
   private listeners: { [event: string]: EventCallback[] } = {};
+  private onceListeners: Map<EventCallback, EventCallback> = new Map();
 
   /**
    * Subscribes to an event.
@@ -28,7 +29,17 @@ export class EventEmitter {
     if (!this.listeners[event]) {
       return;
     }
-    this.listeners[event] = this.listeners[event].filter((listener) => listener !== callback);
+
+    // Check if this callback was a `once` listener
+    const onceWrapper = this.onceListeners.get(callback);
+    if (onceWrapper) {
+      this.onceListeners.delete(callback);
+      // Use the wrapper to find and remove the listener
+      this.listeners[event] = this.listeners[event].filter((listener) => listener !== onceWrapper);
+    } else {
+      // Standard removal for `on` listeners
+      this.listeners[event] = this.listeners[event].filter((listener) => listener !== callback);
+    }
   }
 
   /**
@@ -52,9 +63,13 @@ export class EventEmitter {
    */
   public once(event: string, callback: EventCallback): void {
     const onceCallback: EventCallback = (...args: any[]) => {
+      // The listener is removed by `off` using the original callback,
+      // or it removes itself here after execution.
+      this.onceListeners.delete(callback);
       this.off(event, onceCallback);
       callback(...args);
     };
+    this.onceListeners.set(callback, onceCallback);
     this.on(event, onceCallback);
   }
 }

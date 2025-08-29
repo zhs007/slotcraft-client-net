@@ -23,6 +23,14 @@ export class Connection {
   }
 
   /**
+   * Returns the current state of the WebSocket connection.
+   */
+  public get readyState(): number {
+    // Return WebSocket.CLOSED if the connection is not initialized.
+    return this.ws?.readyState ?? 3;
+  }
+
+  /**
    * Initiates the WebSocket connection.
    */
   public connect(): void {
@@ -66,7 +74,7 @@ export class Connection {
    * @param data The data to send.
    * @returns {boolean} True if data was sent, false if the connection is not open.
    */
-  public send(data: string | ArrayBuffer): boolean {
+  public send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(data);
       return true;

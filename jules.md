@@ -9,7 +9,7 @@
 - **连接管理**: 提供 `connect(token)` 方法来处理 WebSocket 连接、版本检查和登录流程。
 - **状态机**: 内部管理从“未连接”到“游戏中”的完整生命周期状态 (`IDLE`, `CONNECTING`, `CONNECTED`, `IN_GAME`, `RECONNECTING`, `DISCONNECTED`)。
 - **协议封装**: 提供简洁的 API (`send`, `enterGame`)，使开发者无需关心 `cmdid`, `msgid` 等协议细节。
-- **事件驱动**: 通过 `on(event, callback)` 与游戏模块解耦。支持 `connect`, `disconnect`, `reconnecting`, `message`, 和 `raw_message` 等事件。
+- **事件驱动**: 通过 `on(event, callback)` 与游戏模块解耦。支持 `login`, `enter_game`, `connect`, `disconnect`, `reconnecting`, `message`, 和 `raw_message` 等事件。
 - **自动重连**: 在网络意外断开时，自动尝试重新连接。
 - **Keep-Alive**: 登录成功后，自动处理心跳消息，维持长连接。
 - **请求超时**: `send` 方法返回的 Promise 会在超时后自动-reject。
@@ -18,7 +18,7 @@
 
 - **语言**: TypeScript，提供完整的类型定义。
 - **依赖**: 最小化原则，优先使用平台原生 API（如浏览器 `WebSocket`）。
-- **测试**: 使用 Vitest 进行单元测试，逻辑代码覆盖率目标 > 80%。
+- **测试**: 使用 Vitest 进行单元测试，逻辑代码覆盖率目标 > 90%。
 - **打包**: 兼容 Vite 环境，可通过 `npm install` 直接集成。
 - **文档**: 提供中英双语的详细使用文档和 API 参考。
 
@@ -37,6 +37,7 @@
 ├── docs/              # 文档 (服务器协议、使用说明)
 ├── dist/              # 打包后的产物
 ├── src/               # 源代码
+│   ├── index.ts       # 库入口 (Library Entry Point)
 │   ├── types.ts       # 核心类型定义
 │   ├── connection.ts  # WebSocket 封装
 │   ├── main.ts        # 主模块 (SlotcraftClient)
@@ -47,7 +48,7 @@
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
-└── jest.config.js
+└── vitest.config.ts
 ```
 
 ## 6. 示例 (Examples)
