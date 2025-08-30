@@ -59,3 +59,18 @@
   - **配置**: 通过根目录的 `.env` 文件进行配置（`WEBSOCKET_URL`, `TOKEN`, `GAME_CODE`）。
   - **协议日志**: 该示例演示了如何通过监听 `raw_message` 事件来记录所有与服务器的上下行通信到 `msg001.txt` 文件。这份日志可以作为开发和调试，乃至实现 Mock Server 的重要依据。
   - **运行**: `npx ts-node examples/example001.ts`
+
+## 7. 开发日志 (Development Log)
+
+### 2025-08-29: 提升测试覆盖率 (Plan 009)
+
+- **目标**: 将项目测试覆盖率提升至 90% 以上，以保证代码质量和长期可维护性。
+- **实施**:
+  - **引入 Mock Server**: 创建了 `tests/mock-server.ts`，使用 `ws` 库模拟 WebSocket 服务器行为，用于集成测试。
+  - **编写集成测试**: 新增了 `tests/integration.test.ts`，全面测试了客户端的连接、登录、游戏流程、收集奖励、状态管理和错误处理等功能。
+  - **提升覆盖率**: 通过新的测试套件，成功将 `src` 目录的测试覆盖率提升至 **91.6%**。
+- **产出**:
+  - `jules/plan009.md`
+  - `jules/plan009-report.md`
+  - `tests/mock-server.ts`
+  - `tests/integration.test.ts`

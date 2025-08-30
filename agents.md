@@ -58,3 +58,10 @@ npm run check
 ```
 
 _(Note: The `check` script will be configured in `package.json` to execute the commands listed above)._
+
+## Testing Strategy
+
+This project uses a two-pronged testing strategy:
+
+1.  **Unit Tests (`tests/*.test.ts`)**: These tests focus on individual classes and methods in isolation. They use `vi.mock()` to mock dependencies (like the `Connection` class) and test specific logic without involving the network.
+2.  **Integration Tests (`tests/integration.test.ts`)**: These tests verify the client's end-to-end functionality. They use a mock WebSocket server (`tests/mock-server.ts`) to simulate a real server environment. When adding new features or fixing bugs related to client-server communication, prefer adding an integration test to ensure all parts of the system work together correctly.
