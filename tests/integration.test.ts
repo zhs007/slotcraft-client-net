@@ -1,3 +1,4 @@
+import 'isomorphic-ws';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SlotcraftClient } from '../src/main';
 import { MockServer } from './mock-server';
