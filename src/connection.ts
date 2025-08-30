@@ -1,9 +1,5 @@
-import 'isomorphic-ws';
-
 /**
  * @fileoverview A wrapper class for the native WebSocket API.
- * This class is environment-aware and will use `isomorphic-ws` to polyfill
- * the WebSocket API in non-browser environments like Node.js.
  */
 
 export class Connection {
