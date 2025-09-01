@@ -8,10 +8,14 @@
 export enum ConnectionState {
   /** The client is idle and not connected. */
   IDLE = 'IDLE',
-  /** The client is in the process of connecting and logging in. */
+  /** The client is establishing the WebSocket connection. */
   CONNECTING = 'CONNECTING',
-  /** The client has logged in and is ready to enter a game. */
+  /** The WebSocket connection is open, but the client is not yet authenticated. */
   CONNECTED = 'CONNECTED',
+  /** The client is sending authentication credentials. */
+  LOGGING_IN = 'LOGGING_IN',
+  /** The client has authenticated successfully and is ready for game commands. */
+  LOGGED_IN = 'LOGGED_IN',
   /** The client is in the process of entering a game. */
   ENTERING_GAME = 'ENTERING_GAME',
   /** The client is in a game and ready to send/receive game messages. */
@@ -29,6 +33,15 @@ export enum ConnectionState {
 }
 
 /**
+ * Defines a basic logger interface, compatible with the `console` object.
+ */
+export interface Logger {
+  log(message?: any, ...optionalParams: any[]): void;
+  warn(message?: any, ...optionalParams: any[]): void;
+  error(message?: any, ...optionalParams: any[]): void;
+}
+
+/**
  * Configuration options for initializing the SlotcraftClient.
  */
 export interface SlotcraftClientOptions {
@@ -40,6 +53,8 @@ export interface SlotcraftClientOptions {
   reconnectDelay?: number;
   /** Optional: Timeout for a single request in ms. Defaults to 10000. */
   requestTimeout?: number;
+  /** Optional: A custom logger. Set to `null` to disable logging. Defaults to `console`. */
+  logger?: Logger | null;
 }
 
 /**

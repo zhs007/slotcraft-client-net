@@ -74,3 +74,37 @@
   - `jules/plan009-report.md`
   - `tests/mock-server.ts`
   - `tests/integration.test.ts`
+
+### 2025-08-31: Code Review Follow-up (Plan 010)
+
+- **目标**: 根据 `codereview/report-001.md` 的反馈，修复潜在问题并改进代码质量。
+- **实施**:
+  - **修复 `once()` bug**: 解决了 `event-emitter` 中 `once` 监听器无法被 `off` 的问题。
+  - **优化 `send()` 接口**: 将 `Connection.send()` 的参数类型限制为 `string`，使其更符合当前协议需求。
+  - **实现可配置日志**: 允许在客户端初始化时注入自定义 logger，以替代 `console`。
+  - **改进类型导出**: 创建了 `src/index.ts` 作为统一出口，导出了所有公共类型，提升了库的可用性。
+- **产出**:
+  - `jules/plan010.md`
+  - `jules/plan010-report.md`
+  - `src/index.ts`
+
+### 2025-08-31: State Machine Refactoring (Plan 011)
+
+- **目标**: 根据用户反馈，将连接与登录过程分解为更细粒度的状态，以提高状态机的清晰度和准确性。
+- **实施**:
+  - **新增状态**: 在 `ConnectionState` 中加入了 `LOGGING_IN` 和 `LOGGED_IN` 状态。
+  - **重构流程**: 将 `connect()` 方法的职责拆分。`connect()` 现在负责建立 WebSocket 连接（`CONNECTING` -> `CONNECTED`），连接成功后自动触发登录流程（`LOGGING_IN` -> `LOGGED_IN`）。
+  - **更新依赖**: 调整了 `enterGame()` 等方法，使其依赖于新的 `LOGGED_IN` 状态。
+- **产出**:
+  - `jules/plan011.md`
+  - `jules/plan011-report.md`
+
+### 2025-08-31: Increase Test Coverage (Plan 012)
+
+- **目标**: 在状态机重构后，将测试覆盖率恢复到90%以上。
+- **实施**:
+  - **恢复集成测试**: 将先前为简化调试而移除的游戏内逻辑（spin, collect等）的集成测试用例恢复并进行适配。
+  - **补充边界测试**: 分析覆盖率报告，为 `main.ts` 中未覆盖到的错误处理和特定逻辑分支添加新的单元测试。
+- **产出**:
+  - `jules/plan012.md`
+  - `jules/plan012-report.md`

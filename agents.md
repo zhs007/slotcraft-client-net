@@ -1,67 +1,45 @@
-# Agent Instructions
+# AGENTS.md
 
-This document provides instructions for AI agents working on this codebase.
+This document provides instructions for AI agents to work on this project.
 
-## About This Project
+## Project Overview
 
 This project is a TypeScript-based networking library for a frontend application to communicate with a game server. Its primary goal is to provide a stable, resilient, and easy-to-use API for game developers, while handling the complexities of network state, protocol specifics, and error recovery internally.
 
-## Key Principles
+## Key Commands
+
+- **Install dependencies**:
+  ```bash
+  npm install
+  ```
+- **Run all checks (lint, test, build)**:
+  ```bash
+  npm run check
+  ```
+- **Run tests with coverage**:
+  ```bash
+  npm test
+  ```
+- **Build the project**:
+  ```bash
+  npm run build
+  ```
+
+## Code Style and Principles
 
 - **TypeScript First**: All code must have complete and accurate type definitions.
 - **Minimal Dependencies**: Do not add new production dependencies without a strong justification.
 - **High Test Coverage**: All logical code must be covered by unit tests. The target coverage is >90%.
 - **Clarity and Simplicity**: The internal code should be well-commented, and the public API must remain simple and intuitive.
 
-## Development Workflow
+## Testing Strategy
 
-1.  **Understand the Goal**: Before writing code, understand the requirements from the issue description and the project's existing architecture.
-2.  **Write/Update Tests**: For any new feature, write tests first. For any bug fix, first write a failing test that reproduces the bug.
-3.  **Implement the Change**: Write the code to make the tests pass.
-4.  **Verify**: Run all checks to ensure your change is correct and does not introduce regressions.
+- **Unit Tests (`tests/*.test.ts`)**: These test individual classes in isolation, using `vi.mock()` to mock dependencies.
+- **Integration Tests (`tests/integration.test.ts`)**: These verify end-to-end functionality using a mock WebSocket server (`tests/mock-server.ts`). Prefer adding integration tests for new features or bug fixes related to client-server communication.
+- **Test-Driven Development**: For new features, write tests first. For bug fixes, first write a failing test that reproduces the bug.
 
-## How to Verify Your Work
-
-Before submitting your changes, you **must** run the following commands and ensure they all pass without errors.
-
-1.  **Install Dependencies**:
-
-    ```bash
-    npm install
-    ```
-
-2.  **Run All Tests**: This command executes all unit and integration tests.
-
-    ```bash
-    npm test
-    ```
-
-3.  **Check Test Coverage**: This command runs tests and generates a coverage report. Ensure your changes are well-covered and that the overall coverage does not drop below 90%.
-
-    ```bash
-    npm run test:coverage
-    ```
-
-4.  **Build the Project**: Ensure the project can be successfully compiled into JavaScript.
-    ```bash
-    npm run build
-    ```
-
-## Programmatic Checks
-
-You can run all verification steps using a single command defined in `package.json`.
-
-**Agent, to validate your work, run this command:**
+## Agent, to validate your work, run this command:
 
 ```bash
 npm run check
 ```
-
-_(Note: The `check` script will be configured in `package.json` to execute the commands listed above)._
-
-## Testing Strategy
-
-This project uses a two-pronged testing strategy:
-
-1.  **Unit Tests (`tests/*.test.ts`)**: These tests focus on individual classes and methods in isolation. They use `vi.mock()` to mock dependencies (like the `Connection` class) and test specific logic without involving the network.
-2.  **Integration Tests (`tests/integration.test.ts`)**: These tests verify the client's end-to-end functionality. They use a mock WebSocket server (`tests/mock-server.ts`) to simulate a real server environment. When adding new features or fixing bugs related to client-server communication, prefer adding an integration test to ensure all parts of the system work together correctly.

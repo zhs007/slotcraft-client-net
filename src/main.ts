@@ -7,6 +7,7 @@ import {
   RawMessagePayload,
   UserInfo,
   SpinParams,
+  Logger,
 } from './types';
 
 type PendingRequest = {
@@ -22,10 +23,12 @@ export class SlotcraftClient {
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
   private pendingRequests = new Map<string, PendingRequest>();
+  private logger: Logger;
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userInfo: UserInfo = {};
+  private loginPromise: { resolve: () => void; reject: (reason?: any) => void } | null = null;
 
   constructor(options: SlotcraftClientOptions) {
     this.options = {
@@ -34,6 +37,15 @@ export class SlotcraftClient {
       requestTimeout: 10000,
       ...options,
     };
+
+    if (options.logger === null) {
+      // If logger is explicitly null, use a no-op logger
+      this.logger = { log: () => {}, warn: () => {}, error: () => {} };
+    } else {
+      // Otherwise, use the provided logger or default to the console
+      this.logger = options.logger || console;
+    }
+
     this.connection = new Connection(this.options.url);
     this.setupConnectionHandlers();
   }
@@ -63,41 +75,37 @@ export class SlotcraftClient {
   }
 
   public connect(token: string): Promise<void> {
-    if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
+    if (
+      this.state !== ConnectionState.IDLE &&
+      this.state !== ConnectionState.DISCONNECTED
+    ) {
       return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
-    this.setState(ConnectionState.CONNECTING);
-    // Cache token early for convenience; it may also be refreshed via userbaseinfo
-    this.userInfo.token = token;
-    this.connection.connect();
 
+    this.setState(ConnectionState.CONNECTING);
+    // Cache token for auto-reconnects and the subsequent login call.
+    this.userInfo.token = token;
+
+    // This promise will be resolved or rejected by the private _login method.
     return new Promise<void>((resolve, reject) => {
-      // Chain promises to avoid async executor
-      new Promise<void>((res, rej) => {
-        this.emitter.once('connect', res);
-        this.emitter.once('disconnect', (payload) => rej(new Error(payload.reason)));
-      })
-        .then(() => {
-          return this.send('flblogin', {
-            token: token,
-            language: 'en_US',
-          });
-        })
-        .then(() => {
-          this.setState(ConnectionState.CONNECTED);
-          this.startHeartbeat();
-          resolve();
-        })
-        .catch((error) => {
-          const reason = error instanceof Error ? error.message : 'Login failed';
-          this.disconnect();
-          reject(new Error(reason));
-        });
+      this.loginPromise = { resolve, reject };
+
+      // If a disconnection happens before the login promise is settled, reject it.
+      const onDisconnect = (payload: DisconnectEventPayload) => {
+        if (this.loginPromise) {
+          this.loginPromise.reject(new Error(payload.reason));
+          this.loginPromise = null;
+        }
+      };
+      // We only care about this for the initial connection flow.
+      this.emitter.once('disconnect', onDisconnect);
+
+      this.connection.connect();
     });
   }
 
   public enterGame(gamecode: string): Promise<any> {
-    if (this.state !== ConnectionState.CONNECTED) {
+    if (this.state !== ConnectionState.LOGGED_IN) {
       return Promise.reject(new Error(`Cannot enter game in state: ${this.state}`));
     }
     this.setState(ConnectionState.ENTERING_GAME);
@@ -228,7 +236,17 @@ export class SlotcraftClient {
   }
 
   public send(cmdid: string, params: any = {}): Promise<any> {
-    if (this.state === ConnectionState.DISCONNECTED || this.state === ConnectionState.IDLE) {
+    const allowedStates = [
+      ConnectionState.LOGGING_IN, // Allowed only for the login command itself.
+      ConnectionState.LOGGED_IN,
+      ConnectionState.ENTERING_GAME,
+      ConnectionState.IN_GAME,
+      ConnectionState.SPINNING,
+      ConnectionState.SPINEND,
+      ConnectionState.COLLECTING,
+    ];
+
+    if (!allowedStates.includes(this.state)) {
       return Promise.reject(new Error(`Cannot send message in state: ${this.state}`));
     }
 
@@ -273,7 +291,43 @@ export class SlotcraftClient {
   private handleOpen(): void {
     this.reconnectAttempts = 0;
     this.clearReconnectTimer();
-    this.emitter.emit('connect');
+    this.emitter.emit('connect'); // Emit for legacy or internal listeners.
+    this.setState(ConnectionState.CONNECTED);
+
+    // After connecting, proceed to login.
+    // This handles both initial login and re-login after a reconnect.
+    this._login();
+  }
+
+  private _login(): void {
+    if (!this.userInfo.token) {
+      const err = new Error('Login failed: token is missing.');
+      this.loginPromise?.reject(err);
+      this.loginPromise = null;
+      this.disconnect(); // Can't login, so disconnect.
+      return;
+    }
+
+    this.setState(ConnectionState.LOGGING_IN);
+
+    this.send('flblogin', {
+      token: this.userInfo.token,
+      language: 'en_US',
+    })
+      .then(() => {
+        this.setState(ConnectionState.LOGGED_IN);
+        this.startHeartbeat();
+        // Resolve the promise created by the public connect() method.
+        this.loginPromise?.resolve();
+        this.loginPromise = null; // Promise is settled, clear it.
+      })
+      .catch((error) => {
+        const reason = error instanceof Error ? error.message : 'Login failed';
+        // Reject the promise from connect() and disconnect.
+        this.loginPromise?.reject(new Error(reason));
+        this.loginPromise = null;
+        this.disconnect();
+      });
   }
 
   private handleMessage(event: MessageEvent): void {
@@ -328,7 +382,7 @@ export class SlotcraftClient {
         }
       }
     } catch (error) {
-      console.error('Failed to parse server message:', event.data);
+      this.logger.error('Failed to parse server message:', event.data);
       this.emitter.emit('error', new Error('Failed to parse server message'));
     }
   }
@@ -444,13 +498,13 @@ export class SlotcraftClient {
   }
 
   private handleError(event: Event): void {
-    console.error('WebSocket error observed:', event);
+    this.logger.error('WebSocket error observed:', event);
     this.emitter.emit('error', event);
   }
 
   private tryReconnect(): void {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
-      console.error('Max reconnection attempts reached. Giving up.');
+      this.logger.error('Max reconnection attempts reached. Giving up.');
       this.setState(ConnectionState.DISCONNECTED);
       this.rejectAllPendingRequests('Reconnection failed.');
       return;
@@ -464,7 +518,7 @@ export class SlotcraftClient {
 
     this.reconnectTimeout = setTimeout(
       () => {
-        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+        this.logger.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
         this.connection.connect();
       },
       Math.min(delay, 30000)
@@ -482,7 +536,7 @@ export class SlotcraftClient {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
       this.send('keepalive').catch((err) => {
-        console.warn('Heartbeat failed:', err);
+        this.logger.warn('Heartbeat failed:', err);
       });
     }, 30000);
   }
