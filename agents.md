@@ -1,6 +1,10 @@
-# AGENTS.md
+# AGENTS.md version=1.0
 
 This document provides instructions for AI agents to work on this project.
+
+## Capabilities
+
+This project uses `npm` for package management and `vitest` for testing. The agent is expected to be able to run `npm install`, `npm run check`, and other scripts defined in `package.json`.
 
 ## Project Overview
 
@@ -38,8 +42,12 @@ This project is a TypeScript-based networking library for a frontend application
 - **Integration Tests (`tests/integration.test.ts`)**: These verify end-to-end functionality using a mock WebSocket server (`tests/mock-server.ts`). Prefer adding integration tests for new features or bug fixes related to client-server communication.
 - **Test-Driven Development**: For new features, write tests first. For bug fixes, first write a failing test that reproduces the bug.
 
-## Agent, to validate your work, run this command:
+## Custom Instructions
 
-```bash
-npm run check
-```
+- **Agent, to validate your work, run this command:**
+  ```bash
+  npm run check
+  ```
+- When adding new features, please add corresponding tests.
+- When fixing a bug, please add a test that reproduces the bug first.
+- Please keep the documentation (`jules.md`, `README.md`) up to date with your changes.

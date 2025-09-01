@@ -47,6 +47,10 @@ export interface Logger {
 export interface SlotcraftClientOptions {
   /** The WebSocket URL of the game server. */
   url: string;
+  /** Optional: The login token. Can also be provided to the `connect` method. */
+  token?: string;
+  /** Optional: The game code to enter. Can also be provided to the `enterGame` method. */
+  gamecode?: string;
   /** Optional: Maximum number of reconnection attempts. Defaults to 10. */
   maxReconnectAttempts?: number;
   /** Optional: Initial reconnection delay in ms. Defaults to 1000. */

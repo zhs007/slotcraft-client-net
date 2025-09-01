@@ -38,6 +38,10 @@ export class SlotcraftClient {
       ...options,
     };
 
+    // Cache token and gamecode from constructor options
+    this.userInfo.token = options.token;
+    this.userInfo.gamecode = options.gamecode;
+
     if (options.logger === null) {
       // If logger is explicitly null, use a no-op logger
       this.logger = { log: () => {}, warn: () => {}, error: () => {} };
@@ -74,7 +78,7 @@ export class SlotcraftClient {
     return this.userInfo;
   }
 
-  public connect(token: string): Promise<void> {
+  public connect(token?: string): Promise<void> {
     if (
       this.state !== ConnectionState.IDLE &&
       this.state !== ConnectionState.DISCONNECTED
@@ -82,9 +86,15 @@ export class SlotcraftClient {
       return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
 
-    this.setState(ConnectionState.CONNECTING);
+    // Use token from argument if provided, otherwise fall back to the one from constructor options.
+    const tokenToUse = token || this.userInfo.token;
+    if (!tokenToUse) {
+      return Promise.reject(new Error('Token must be provided either in the constructor or to connect()'));
+    }
     // Cache token for auto-reconnects and the subsequent login call.
-    this.userInfo.token = token;
+    this.userInfo.token = tokenToUse;
+
+    this.setState(ConnectionState.CONNECTING);
 
     // This promise will be resolved or rejected by the private _login method.
     return new Promise<void>((resolve, reject) => {
@@ -104,15 +114,22 @@ export class SlotcraftClient {
     });
   }
 
-  public enterGame(gamecode: string): Promise<any> {
+  public enterGame(gamecode?: string): Promise<any> {
     if (this.state !== ConnectionState.LOGGED_IN) {
       return Promise.reject(new Error(`Cannot enter game in state: ${this.state}`));
     }
-    this.setState(ConnectionState.ENTERING_GAME);
+
+    // Use gamecode from argument if provided, otherwise fall back to the one from constructor options.
+    const gamecodeToUse = gamecode || this.userInfo.gamecode;
+    if (!gamecodeToUse) {
+      return Promise.reject(new Error('Game code must be provided either in the constructor or to enterGame()'));
+    }
     // Cache gamecode for context
-    this.userInfo.gamecode = gamecode;
+    this.userInfo.gamecode = gamecodeToUse;
+
+    this.setState(ConnectionState.ENTERING_GAME);
     return this.send('comeingame3', {
-      gamecode,
+      gamecode: gamecodeToUse,
       tableid: '',
       isreconnect: false,
     }).then((response) => {

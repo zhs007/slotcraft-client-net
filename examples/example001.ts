@@ -17,7 +17,7 @@
 
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
-import WebSocket from 'isomorphic-ws';
+import WebSocket from 'ws';
 import { SlotcraftClient } from '../src/main';
 import { RawMessagePayload } from '../src/types';
 
@@ -58,7 +58,11 @@ const main = async () => {
   // Clear the log file at the start.
   fs.writeFileSync(LOG_FILE, '--- WebSocket Communication Log ---\n\n');
 
-  const client = new SlotcraftClient({ url: WEBSOCKET_URL });
+  const client = new SlotcraftClient({
+    url: WEBSOCKET_URL,
+    token: TOKEN,
+    gamecode: GAME_CODE,
+  });
 
   // Setup logging
   client.on('raw_message', logRawMessage);
@@ -159,12 +163,12 @@ const main = async () => {
   };
 
   try {
-    // 1. Connect and log in
-    await client.connect(TOKEN);
+    // 1. Connect and log in (token is now read from constructor options)
+    await client.connect();
     console.log('Client connected and logged in successfully.');
 
-    // 2. Enter the game
-    await client.enterGame(GAME_CODE);
+    // 2. Enter the game (gamecode is now read from constructor options)
+    await client.enterGame();
     console.log(`Entered game ${GAME_CODE}. Using enterGame cmdret to start spins immediately.`);
 
     // Start spins immediately after enterGame returns (cmdret should indicate comeingame)
