@@ -108,3 +108,15 @@
 - **产出**:
   - `jules/plan012.md`
   - `jules/plan012-report.md`
+
+### 2025-09-01: Code Review Follow-up (Plan 013)
+
+- **目标**: 根据 `codereview/report-002.md` 的反馈，修复并发、状态和性能相关的问题。
+- **实施**:
+  - **并发请求保护**: 在 `send()` 方法中增加了检查，防止同一 `cmdid` 的请求被并发发送，从而避免了潜在的竞态条件。后一个请求会直接被拒绝。
+  - **登录状态强化**: 增强了状态机的安全性，在 `LOGGING_IN` 状态下仅允许 `flblogin` 命令，其它命令一律拒绝。
+  - **性能优化**: 重构了 `handleMessage` 方法，将其中重复的 `JSON.parse()` 调用优化为单次调用，提升了消息处理效率。
+  - **代码注释**: 为 `collect()` 方法中的序列推导逻辑补充了注释，说明其行为是基于协议要求。
+- **产出**:
+  - `jules/plan013.md`
+  - `jules/plan013-report.md`

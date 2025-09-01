@@ -190,6 +190,10 @@ export class SlotcraftClient {
     // When caller does not provide playIndex, derive sequence from resultsCount if available
     const deriveSequence = (): number[] | undefined => {
       if (typeof playIndex === 'number') return [playIndex];
+      // Per protocol, when a spin results in multiple stages (resultsCount > 1),
+      // they must be collected sequentially. This logic handles collecting the
+      // final two stages for multi-stage wins, or the single stage for simple wins.
+      // The protocol requires this specific sequence for collection.
       if (typeof resultsCount === 'number') {
         if (resultsCount > 1) return [resultsCount - 1, resultsCount];
         if (resultsCount === 1) return [1];
@@ -236,8 +240,15 @@ export class SlotcraftClient {
   }
 
   public send(cmdid: string, params: any = {}): Promise<any> {
+    // P1: Restrict commands during LOGGING_IN state.
+    if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
+      return Promise.reject(
+        new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`)
+      );
+    }
+
     const allowedStates = [
-      ConnectionState.LOGGING_IN, // Allowed only for the login command itself.
+      ConnectionState.LOGGING_IN,
       ConnectionState.LOGGED_IN,
       ConnectionState.ENTERING_GAME,
       ConnectionState.IN_GAME,
@@ -248,6 +259,13 @@ export class SlotcraftClient {
 
     if (!allowedStates.includes(this.state)) {
       return Promise.reject(new Error(`Cannot send message in state: ${this.state}`));
+    }
+
+    // P0: Prevent concurrent requests for the same cmdid.
+    if (this.pendingRequests.has(cmdid)) {
+      return Promise.reject(
+        new Error(`A request with cmdid '${cmdid}' is already pending.`)
+      );
     }
 
     const message = JSON.stringify({ cmdid, ...params });
@@ -333,9 +351,9 @@ export class SlotcraftClient {
   private handleMessage(event: MessageEvent): void {
     this.emitRawMessage('RECV', event.data);
     try {
-      const messages = Array.isArray(JSON.parse(event.data))
-        ? JSON.parse(event.data)
-        : [JSON.parse(event.data)];
+      // P2: Parse JSON only once.
+      const parsedData = JSON.parse(event.data);
+      const messages = Array.isArray(parsedData) ? parsedData : [parsedData];
 
       for (const msg of messages) {
         if (msg.msgid === 'cmdret') {
