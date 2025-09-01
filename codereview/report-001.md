@@ -36,6 +36,9 @@
 - 建议
   - `send()` 的入参类型目前为 `string | ArrayBuffer`，浏览器实际还支持 `Blob`、`ArrayBufferView`。可考虑放宽为 `string | ArrayBufferLike | Blob | ArrayBufferView` 提升兼容性。
   - 可补充只读属性暴露当前 `readyState`（或简单 getter），便于调用方判断状态。
+- 最终方案
+  - connection 只用于这个协议，所以send只需要支持 string 即可，不需要做更多的冗余设计。
+  - readyState 可以暴露接口，但SlotcraftClient应该使用，当前的state应该需要考虑到readyState，外部不需要知道connection，接口应该尽可能简洁。
 
 ### 2) `src/event-emitter.ts`
 
@@ -45,6 +48,7 @@
   - `once()` 通过包装回调实现，一旦注册后无法通过原回调引用直接 `off` 移除该包装。可选改进：
     - `once()` 返回用于取消订阅的函数或标识；
     - 在内部保存包装映射，`off` 时可识别并移除对应包装器。
+- 局限与建议里的属于一个潜在的bug，需要修正。
 
 ### 3) `src/main.ts`（SlotcraftClient）
 
@@ -66,7 +70,7 @@
         - 或在 `error` 事件回调中允许上层决定是否 `disconnect()`。
   4.  事件与可观测性：
       - 当前事件包含 `connect`、`ready`、`disconnect`、`reconnecting`、`error`，已基本可用；
-      - 可增加更细粒度事件（如 `logged_in`、`entered_game`），方便上层对流程阶段做区分；
+      - 事件已经足够，但state欠缺粒度，可增加更细粒度state（如 `logged_in`、`entered_game`），方便上层对流程阶段做区分；
       - `console.log`/`console.error` 可改为可注入的 logger 或通过开关控制，以便生产环境降噪。
   5.  API 体验：
       - `send(cmd, data)` 仅在 `IN_GAME` 允许发送。若存在登录前需要交互的场景，可提供队列或 Hook 让调用方自定义策略（当前在 `RECONNECTING` 已做排队，首连阶段或许也可考虑）。
@@ -100,7 +104,7 @@
   - 修正计时器类型为 `ReturnType<typeof setTimeout/setInterval>`，避免浏览器环境类型不匹配（可能导致 TS 编译失败）。
   - 扩大 `connect()` 的防重入范围：除 `IDLE/DISCONNECTED` 外均拒绝，防止中途误触发二次连接。
 - P1
-  - `send()` 入参加强：支持 `Blob`、`ArrayBufferView` 等。
+  - `send()` 只需要支持 string 即可。
   - 事件细分和可配置 logger，提升可观测性与生产可用性。
   - 在 `main.ts` 导出公共类型，提升库可用性。
 - P2
