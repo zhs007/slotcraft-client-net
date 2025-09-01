@@ -195,4 +195,89 @@ describe('SlotcraftClient (Real Timers)', () => {
       await expect(sendPromise).rejects.toThrow("Command 'any_cmd' failed.");
     });
   });
+
+  describe('Error Handling and Edge Cases', () => {
+    it('should reject login if token is missing', async () => {
+      // This test manually manipulates internal state to test a specific branch.
+      (client as any).userInfo.token = undefined;
+      const connectPromise = client.connect(''); // Pass empty to satisfy signature
+      await sleep(1);
+      mockConnection.onOpen?.(); // Trigger the login flow
+      await expect(connectPromise).rejects.toThrow('Login failed: token is missing.');
+      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
+    });
+
+    it('should reject spin if gameid or ctrlid are missing', async () => {
+      // Get to IN_GAME state
+      const connectPromise = client.connect(TEST_TOKEN);
+      mockConnection.onOpen?.();
+      await simulateCmdRet('flblogin');
+      await connectPromise;
+      const enterPromise = client.enterGame(TEST_GAME_CODE);
+      await simulateCmdRet('comeingame3');
+      await enterPromise;
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+
+      // Test without gameid
+      (client as any).userInfo.gameid = undefined;
+      await expect(client.spin({})).rejects.toThrow('gameid not available');
+
+      // Test without ctrlid
+      (client as any).userInfo.gameid = 123; // Restore gameid
+      (client as any).userInfo.ctrlid = undefined;
+      await expect(client.spin({})).rejects.toThrow('ctrlid not available');
+    });
+
+    it('should reject spin if bet is missing and no default is available', async () => {
+      const connectPromise = client.connect(TEST_TOKEN);
+      mockConnection.onOpen?.();
+      await simulateCmdRet('flblogin');
+      await connectPromise;
+      const enterPromise = client.enterGame(TEST_GAME_CODE);
+      await simulateCmdRet('comeingame3');
+      await enterPromise;
+      await pushMsg({ msgid: 'gamemoduleinfo', gameid: 1, gmi: {} });
+      await pushMsg({ msgid: 'gameuserinfo', ctrlid: 1 });
+
+      // No defaultLinebet in userInfo
+      (client as any).userInfo.defaultLinebet = undefined;
+      await expect(client.spin({})).rejects.toThrow('bet is required');
+    });
+
+    it('should reject collect if playIndex cannot be derived', async () => {
+      const connectPromise = client.connect(TEST_TOKEN);
+      mockConnection.onOpen?.();
+      await simulateCmdRet('flblogin');
+      await connectPromise;
+      const enterPromise = client.enterGame(TEST_GAME_CODE);
+      await simulateCmdRet('comeingame3');
+      await enterPromise;
+      await pushMsg({ msgid: 'gamemoduleinfo', gameid: 1, gmi: {} });
+
+      // Ensure all sources for playIndex are undefined
+      (client as any).userInfo.lastPlayIndex = undefined;
+      (client as any).userInfo.lastResultsCount = undefined;
+
+      await expect(client.collect()).rejects.toThrow('playIndex not available');
+    });
+
+    it('should correctly parse gamecfg and derive linesOptions', async () => {
+      const connectPromise = client.connect(TEST_TOKEN);
+      mockConnection.onOpen?.();
+      await simulateCmdRet('flblogin');
+      await connectPromise;
+
+      // Test malformed data
+      await pushMsg({ msgid: 'gamecfg', data: '{"bad"' });
+      expect((client as any).userInfo.gamecfgData).toBeUndefined();
+
+      // Test deriving linesOptions from data keys
+      await pushMsg({ msgid: 'gamecfg', data: '{"50":{}, "10":{}, "25":{}}' });
+      expect((client as any).userInfo.linesOptions).toEqual([10, 25, 50]);
+
+      // Test that 'bets' array overrides derived options
+      await pushMsg({ msgid: 'gamecfg', data: '{"1":{}, "2":{}}', bets: [5, 3] });
+      expect((client as any).userInfo.linesOptions).toEqual([3, 5]);
+    });
+  });
 });
