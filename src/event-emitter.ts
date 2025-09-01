@@ -23,20 +23,36 @@ export class EventEmitter {
   /**
    * Unsubscribes from an event.
    * @param event The name of the event.
-   * @param callback The callback function to remove.
+   * @param callback The callback function to remove. This can be the original
+   * callback passed to `on` or `once`, or the wrapper function for a `once` listener.
    */
   public off(event: string, callback: EventCallback): void {
     if (!this.listeners[event]) {
       return;
     }
 
+    // Determine the actual listener to remove. It could be the callback itself
+    // or a wrapper created by `once()`.
     const callbackToRemove = this.onceMap.get(callback) || callback;
+
     this.listeners[event] = this.listeners[event].filter(
       (listener) => listener !== callbackToRemove
     );
 
-    // Ensure the map is cleaned up if a `once` listener is removed manually.
-    this.onceMap.delete(callback);
+    // --- Memory Leak Fix ---
+    // If the original callback was for a `once` listener, clean up the map.
+    if (this.onceMap.has(callback)) {
+      this.onceMap.delete(callback);
+    } else {
+      // If the callback passed to `off` was the wrapper itself, we need to
+      // find the original key in the map and remove it to prevent leaks.
+      for (const [key, value] of this.onceMap.entries()) {
+        if (value === callback) {
+          this.onceMap.delete(key);
+          break; // Found and removed, no need to continue iterating.
+        }
+      }
+    }
   }
 
   /**

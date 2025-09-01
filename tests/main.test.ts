@@ -197,14 +197,27 @@ describe('SlotcraftClient (Real Timers)', () => {
   });
 
   describe('Error Handling and Edge Cases', () => {
-    it('should reject login if token is missing', async () => {
-      // This test manually manipulates internal state to test a specific branch.
-      (client as any).userInfo.token = undefined;
-      const connectPromise = client.connect(''); // Pass empty to satisfy signature
+    it('should reject connect() if token is provided nowhere', async () => {
+      const clientWithoutToken = new SlotcraftClient({ url: 'ws://test.com' });
+      await expect(clientWithoutToken.connect()).rejects.toThrow(
+        'Token must be provided either in the constructor or to connect()'
+      );
+    });
+
+    it('should reject _login() if token is missing internally', async () => {
+      const clientWithEmptyToken = new SlotcraftClient(options);
+      const mockConn = (Connection as any).mock.instances[1];
+
+      const connectPromise = clientWithEmptyToken.connect('valid-token');
+
+      // Manually set token to undefined *after* the connect call but *before* the login logic runs
+      (clientWithEmptyToken as any).userInfo.token = undefined;
+
       await sleep(1);
-      mockConnection.onOpen?.(); // Trigger the login flow
+      mockConn.onOpen?.(); // Trigger the login flow
+
       await expect(connectPromise).rejects.toThrow('Login failed: token is missing.');
-      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
+      expect(clientWithEmptyToken.getState()).toBe(ConnectionState.DISCONNECTED);
     });
 
     it('should reject spin if gameid or ctrlid are missing', async () => {

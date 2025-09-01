@@ -120,3 +120,20 @@
 - **产出**:
   - `jules/plan013.md`
   - `jules/plan013-report.md`
+
+### 2025-09-01: Refactor, Fix, and Test (Plan 014)
+
+- **目标**: 根据用户请求和 `codereview/report-002.md` 的反馈，进行多项重构、修复和测试增强。
+- **实施**:
+  - **客户端便利性重构**:
+    - `SlotcraftClient` 构造函数现在可以接受 `token` 和 `gamecode`。
+    - `connect()` 和 `enterGame()` 方法现在可以无参数调用，会自动使用构造函数中提供的值。
+  - **修复 `EventEmitter` 内存泄漏**: 解决了在 `off()` 方法中移除 `once()` 监听器时，特定情况下映射未被清理的问题。
+  - **依赖标准化**: 将示例代码 `examples/example001.ts` 中的 `isomorphic-ws` 依赖替换为项目已有的 `ws` 依赖。
+  - **增强测试覆盖**:
+    - 针对 `codereview/report-002.md` 中提到的并发请求、登录状态命令限制、JSON 解析优化和 `collect` 复杂场景，添加了专门的单元测试。
+    - 解决了在测试过程中因不正确的 Mock Server 重构导致的全面测试失败问题，通过回退和渐进式修复，恢复了测试套件的稳定性。
+- **产出**:
+  - `jules/plan014.md`
+  - `jules/plan014-report.md`
+  - `tests/main-adv.test.ts`
