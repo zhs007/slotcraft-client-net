@@ -7,6 +7,7 @@ import {
   RawMessagePayload,
   UserInfo,
   SpinParams,
+  Logger,
 } from './types';
 
 type PendingRequest = {
@@ -22,6 +23,7 @@ export class SlotcraftClient {
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
   private pendingRequests = new Map<string, PendingRequest>();
+  private logger: Logger;
 
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -34,6 +36,15 @@ export class SlotcraftClient {
       requestTimeout: 10000,
       ...options,
     };
+
+    if (options.logger === null) {
+      // If logger is explicitly null, use a no-op logger
+      this.logger = { log: () => {}, warn: () => {}, error: () => {} };
+    } else {
+      // Otherwise, use the provided logger or default to the console
+      this.logger = options.logger || console;
+    }
+
     this.connection = new Connection(this.options.url);
     this.setupConnectionHandlers();
   }
@@ -328,7 +339,7 @@ export class SlotcraftClient {
         }
       }
     } catch (error) {
-      console.error('Failed to parse server message:', event.data);
+      this.logger.error('Failed to parse server message:', event.data);
       this.emitter.emit('error', new Error('Failed to parse server message'));
     }
   }
@@ -444,13 +455,13 @@ export class SlotcraftClient {
   }
 
   private handleError(event: Event): void {
-    console.error('WebSocket error observed:', event);
+    this.logger.error('WebSocket error observed:', event);
     this.emitter.emit('error', event);
   }
 
   private tryReconnect(): void {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
-      console.error('Max reconnection attempts reached. Giving up.');
+      this.logger.error('Max reconnection attempts reached. Giving up.');
       this.setState(ConnectionState.DISCONNECTED);
       this.rejectAllPendingRequests('Reconnection failed.');
       return;
@@ -464,7 +475,7 @@ export class SlotcraftClient {
 
     this.reconnectTimeout = setTimeout(
       () => {
-        console.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
+        this.logger.log(`Attempting to reconnect... (attempt ${this.reconnectAttempts})`);
         this.connection.connect();
       },
       Math.min(delay, 30000)
@@ -482,7 +493,7 @@ export class SlotcraftClient {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
       this.send('keepalive').catch((err) => {
-        console.warn('Heartbeat failed:', err);
+        this.logger.warn('Heartbeat failed:', err);
       });
     }, 30000);
   }

@@ -29,6 +29,15 @@ export enum ConnectionState {
 }
 
 /**
+ * Defines a basic logger interface, compatible with the `console` object.
+ */
+export interface Logger {
+  log(message?: any, ...optionalParams: any[]): void;
+  warn(message?: any, ...optionalParams: any[]): void;
+  error(message?: any, ...optionalParams: any[]): void;
+}
+
+/**
  * Configuration options for initializing the SlotcraftClient.
  */
 export interface SlotcraftClientOptions {
@@ -40,6 +49,8 @@ export interface SlotcraftClientOptions {
   reconnectDelay?: number;
   /** Optional: Timeout for a single request in ms. Defaults to 10000. */
   requestTimeout?: number;
+  /** Optional: A custom logger. Set to `null` to disable logging. Defaults to `console`. */
+  logger?: Logger | null;
 }
 
 /**

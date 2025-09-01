@@ -63,10 +63,10 @@ export class Connection {
 
   /**
    * Sends data over the WebSocket connection.
-   * @param data The data to send.
+   * @param data The string data to send.
    * @returns {boolean} True if data was sent, false if the connection is not open.
    */
-  public send(data: string | ArrayBuffer): boolean {
+  public send(data: string): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(data);
       return true;

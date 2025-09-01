@@ -74,3 +74,16 @@
   - `jules/plan009-report.md`
   - `tests/mock-server.ts`
   - `tests/integration.test.ts`
+
+### 2025-08-31: Code Review Follow-up (Plan 010)
+
+- **目标**: 根据 `codereview/report-001.md` 的反馈，修复潜在问题并改进代码质量。
+- **实施**:
+  - **修复 `once()` bug**: 解决了 `event-emitter` 中 `once` 监听器无法被 `off` 的问题。
+  - **优化 `send()` 接口**: 将 `Connection.send()` 的参数类型限制为 `string`，使其更符合当前协议需求。
+  - **实现可配置日志**: 允许在客户端初始化时注入自定义 logger，以替代 `console`。
+  - **改进类型导出**: 创建了 `src/index.ts` 作为统一出口，导出了所有公共类型，提升了库的可用性。
+- **产出**:
+  - `jules/plan010.md`
+  - `jules/plan010-report.md`
+  - `src/index.ts`
