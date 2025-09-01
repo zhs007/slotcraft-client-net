@@ -87,3 +87,14 @@
   - `jules/plan010.md`
   - `jules/plan010-report.md`
   - `src/index.ts`
+
+### 2025-08-31: State Machine Refactoring (Plan 011)
+
+- **目标**: 根据用户反馈，将连接与登录过程分解为更细粒度的状态，以提高状态机的清晰度和准确性。
+- **实施**:
+  - **新增状态**: 在 `ConnectionState` 中加入了 `LOGGING_IN` 和 `LOGGED_IN` 状态。
+  - **重构流程**: 将 `connect()` 方法的职责拆分。`connect()` 现在负责建立 WebSocket 连接（`CONNECTING` -> `CONNECTED`），连接成功后自动触发登录流程（`LOGGING_IN` -> `LOGGED_IN`）。
+  - **更新依赖**: 调整了 `enterGame()` 等方法，使其依赖于新的 `LOGGED_IN` 状态。
+- **产出**:
+  - `jules/plan011.md`
+  - `jules/plan011-report.md`

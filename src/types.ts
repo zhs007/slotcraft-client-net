@@ -8,10 +8,14 @@
 export enum ConnectionState {
   /** The client is idle and not connected. */
   IDLE = 'IDLE',
-  /** The client is in the process of connecting and logging in. */
+  /** The client is establishing the WebSocket connection. */
   CONNECTING = 'CONNECTING',
-  /** The client has logged in and is ready to enter a game. */
+  /** The WebSocket connection is open, but the client is not yet authenticated. */
   CONNECTED = 'CONNECTED',
+  /** The client is sending authentication credentials. */
+  LOGGING_IN = 'LOGGING_IN',
+  /** The client has authenticated successfully and is ready for game commands. */
+  LOGGED_IN = 'LOGGED_IN',
   /** The client is in the process of entering a game. */
   ENTERING_GAME = 'ENTERING_GAME',
   /** The client is in a game and ready to send/receive game messages. */
