@@ -26,6 +26,8 @@ export enum ConnectionState {
   SPINEND = 'SPINEND',
   /** A spin (gamectrl3) is in flight. */
   SPINNING = 'SPINNING',
+  /** A player selection (gamectrl3) is in flight. */
+  PLAYER_CHOICING = 'PLAYER_CHOICING',
   /** A collect command is in flight after a win. */
   COLLECTING = 'COLLECTING',
   /** The client is disconnected and will attempt to reconnect. */
