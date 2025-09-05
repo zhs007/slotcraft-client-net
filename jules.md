@@ -60,7 +60,11 @@
   - **协议日志**: 该示例演示了如何通过监听 `raw_message` 事件来记录所有与服务器的上下行通信到 `msg001.txt` 文件。这份日志可以作为开发和调试，乃至实现 Mock Server 的重要依据。
   - **运行**: `npx ts-node examples/example001.ts`
 
-## 7. 开发日志 (Development Log)
+## 7. 注意事项
+
+  - 不要在 on message 或 on state 里，直接做任何的 游戏核心操作（spin、selectOptional、collect），而应该在逻辑循环内部处理这些，且一定要依次执行。
+
+## 8. 开发日志 (Development Log)
 
 ### 2025-08-29: 提升测试覆盖率 (Plan 009)
 
@@ -171,7 +175,7 @@
 
 - **目标**: 更新 `examples/example001.ts` 示例脚本，以演示新功能并调整测试逻辑。
 - **实施**:
-  - **处理 `WAITTING_PLAYER` 状态**: 在示例脚本中增加了对 `state` 事件的监听。当状态变为 `WAITTING_PLAYER` 时，脚本会自动从 `UserInfo` 中获取可用选项，并随机选择一个执行 `selectOptional`。
+  - **处理 `WAITTING_PLAYER` 状态**: 注意，不要在 on message 或 on state 里，直接做任何的 游戏核心操作（spin、selectOptional、collect），而应该在逻辑循环内部处理这些，且一定要依次执行。
   - **修改 Spin 逻辑**: 调整了 `spinAcrossLines` 函数的行为。原有的逻辑是“直到出现一次赢和一次输”后停止，现修改为对每个下注线数固定执行 100 次 spin，使其更适合用于压力测试或长时间挂机场景。
 - **产出**:
   - `jules/plan016.md`
