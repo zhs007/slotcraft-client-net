@@ -256,15 +256,6 @@ export class SlotcraftClient {
       return Promise.reject(new Error('Missing spin parameters for selection'));
     }
 
-    // Manually clear the pending 'spin' request, as it's being superseded by this choice.
-    // Rejecting it allows any code awaiting the original spin() to unblock.
-    const pendingSpin = this.pendingRequests.get('gamectrl3');
-    if (pendingSpin) {
-      clearTimeout(pendingSpin.timer);
-      pendingSpin.reject(new Error('Spin superseded by player choice requirement.'));
-      this.pendingRequests.delete('gamectrl3');
-    }
-
     const selection = optionals[index];
     const ctrlparam = {
       ...curSpinParams, // includes bet, lines, times
@@ -272,8 +263,8 @@ export class SlotcraftClient {
       commandParam: selection.param,
     };
 
-    // After selection, we expect to go back to spinning or a similar state
-    this.setState(ConnectionState.SPINNING);
+    // After selection, we are in a new "choicing" state, awaiting the result.
+    this.setState(ConnectionState.PLAYER_CHOICING);
     return this.send('gamectrl3', {
       gameid,
       ctrlid,
@@ -318,6 +309,7 @@ export class SlotcraftClient {
       ConnectionState.ENTERING_GAME,
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
+      ConnectionState.PLAYER_CHOICING,
       ConnectionState.SPINEND,
       ConnectionState.COLLECTING,
       ConnectionState.WAITTING_PLAYER,
@@ -436,10 +428,20 @@ export class SlotcraftClient {
           // Drive state transitions on cmdret where applicable
           switch (msg.cmdid) {
             case 'gamectrl3': {
-              // Spin ended: decide new state based on cached totals
+              const gmi = this.userInfo.lastGMI;
+              const totalwin = this.userInfo.lastTotalWin ?? 0;
+
               if (this.state === ConnectionState.SPINNING) {
-                const totalwin = this.userInfo.lastTotalWin ?? 0;
-                const gmi = this.userInfo.lastGMI;
+                // For a standard spin, check if it resulted in a player choice scenario.
+                if (gmi?.replyPlay?.finished === false) {
+                  this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+                } else if (totalwin > 0) {
+                  this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+                } else {
+                  this.setState(ConnectionState.IN_GAME);
+                }
+              } else if (this.state === ConnectionState.PLAYER_CHOICING) {
+                // After a player choice, decide the outcome.
                 if (totalwin > 0) {
                   this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
                 } else {
@@ -523,7 +525,7 @@ export class SlotcraftClient {
             : undefined;
         if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
 
-        // Handle player choice state transition
+        // Handle player choice options caching
         const { replyPlay } = g;
         if (replyPlay && replyPlay.finished === false) {
           const { nextCommands, nextCommandParams } = replyPlay;
@@ -537,9 +539,6 @@ export class SlotcraftClient {
               command,
               param: nextCommandParams[i],
             }));
-            // This is an exception to the "no state changes in updateCaches" rule.
-            // The protocol requires the client to halt and wait for user input here.
-            this.setState(ConnectionState.WAITTING_PLAYER, { gmi: g });
           }
         }
         break;

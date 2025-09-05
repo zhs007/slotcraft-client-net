@@ -12,11 +12,11 @@ This project is a TypeScript-based networking library for a frontend application
 
 ### Game Flow Notes
 
-- **Standard Spin**: `spin()` -> `IN_GAME` -> `SPINNING` -> `SPINEND` (on win) -> `collect()` -> `IN_GAME`.
-- **Player Choice Spin**: Some spins may require player input.
-  - The flow is `spin()` -> `SPINNING` -> `WAITTING_PLAYER`.
-  - In the `WAITTING_PLAYER` state, the `UserInfo` object will contain an `optionals` array.
-  - The agent must call `selectOptional(index)` to continue the game. The original `spin()` promise will reject, and the `selectOptional()` promise should be awaited instead.
+- **Standard Spin**: `spin()` resolves, and the state transitions: `IN_GAME` -> `SPINNING` -> `SPINEND` (on win) or `IN_GAME` (no win).
+- **Player Choice Spin**: This is a multi-step process.
+  1.  Call `spin()`. The promise resolves normally. The state transitions: `IN_GAME` -> `SPINNING` -> `WAITTING_PLAYER`.
+  2.  In the `WAITTING_PLAYER` state, the `UserInfo` object will contain an `optionals` array with choices.
+  3.  Call `selectOptional(index)`. This promise resolves with the final outcome of the choice. The state transitions: `WAITTING_PLAYER` -> `PLAYER_CHOICING` -> `SPINEND` (on win) or `IN_GAME` (no win).
 
 ## Key Commands
 

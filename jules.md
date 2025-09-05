@@ -155,12 +155,26 @@
   - `jules/plan015.md`
   - `jules/plan015-report.md`
 
+<<<<<<< HEAD
 ### 2025-09-04: Update Example Script Logic (Plan 016)
 
 - **目标**: 更新 `examples/example001.ts` 示例脚本，以演示新功能并调整测试逻辑。
 - **实施**:
   - **处理 `WAITTING_PLAYER` 状态**: 在示例脚本中增加了对 `state` 事件的监听。当状态变为 `WAITTING_PLAYER` 时，脚本会自动从 `UserInfo` 中获取可用选项，并随机选择一个执行 `selectOptional`。
   - **修改 Spin 逻辑**: 调整了 `spinAcrossLines` 函数的行为。原有的逻辑是“直到出现一次赢和一次输”后停止，现修改为对每个下注线数固定执行 100 次 spin，使其更适合用于压力测试或长时间挂机场景。
+=======
+### 2025-09-04: Correct Player Choice Flow (Plan 016)
+
+- **目标**: 根据用户反馈，修复玩家选择流程中的严重逻辑错误，确保客户端状态机严格遵守 `cmdret` 协议。
+- **实施**:
+  - **状态机修正**:
+    - 新增了 `PLAYER_CHOICING` 状态，用于表示玩家已做出选择、正在等待服务器响应的中间状态。
+    - 将 `SPINNING` -> `WAITTING_PLAYER` 的状态转换逻辑从 `updateCaches` 方法（被动消息）移动到了 `gamectrl3` 的 `cmdret` 处理器中。这确保了状态转换只在收到明确的命令回复后发生，解决了根本的逻辑问题。
+    - 相应地，`selectOptional` 方法现在会切换到 `PLAYER_CHOICING` 状态，其后续流程也由 `cmdret` 驱动。
+  - **测试重构**:
+    - 重写了“玩家选择流程”的集成测试，使其与修正后的、正确的协议流程（即 `spin` -> `gamemoduleinfo` -> `cmdret` -> `WAITTING_PLAYER`）保持一致。
+  - **代码清理**: 移除了在 `selectOptional` 中手动拒绝 `spin` promise 的 hacky 逻辑，因为正确的流程不再需要它。
+>>>>>>> feat-player-choice-state
 - **产出**:
   - `jules/plan016.md`
   - `jules/plan016-report.md`
