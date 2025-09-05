@@ -10,6 +10,14 @@ This project uses `npm` for package management and `vitest` for testing. The age
 
 This project is a TypeScript-based networking library for a frontend application to communicate with a game server. Its primary goal is to provide a stable, resilient, and easy-to-use API for game developers, while handling the complexities of network state, protocol specifics, and error recovery internally.
 
+### Game Flow Notes
+
+- **Standard Spin**: `spin()` -> `IN_GAME` -> `SPINNING` -> `SPINEND` (on win) -> `collect()` -> `IN_GAME`.
+- **Player Choice Spin**: Some spins may require player input.
+  - The flow is `spin()` -> `SPINNING` -> `WAITTING_PLAYER`.
+  - In the `WAITTING_PLAYER` state, the `UserInfo` object will contain an `optionals` array.
+  - The agent must call `selectOptional(index)` to continue the game. The original `spin()` promise will reject, and the `selectOptional()` promise should be awaited instead.
+
 ## Key Commands
 
 - **Install dependencies**:

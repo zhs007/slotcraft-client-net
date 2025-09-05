@@ -171,6 +171,78 @@ describe('SlotcraftClient Integration Tests', () => {
     });
   });
 
+  describe('Player Choice Flow', () => {
+    beforeEach(async () => {
+      await connectAndEnterGame();
+      // Set up a spin that results in a player choice
+      server.on('gamectrl3', (msg, ws) => {
+        if (msg.ctrlname === 'spin') {
+          server.send(ws, {
+            msgid: 'gamemoduleinfo',
+            gmi: {
+              replyPlay: {
+                nextCommands: ['bg-selectfg', 'bg-selectfg'],
+                nextCommandParams: ['lefty-bugsy-lefty', 'lefty-bugsy-bugsy'],
+                finished: false,
+              },
+            },
+          });
+          // Unlike a normal spin, there's no immediate cmdret.
+          // The cmdret comes after the player makes a choice.
+        } else if (msg.ctrlname === 'selectfree') {
+          // This is the choice selection
+          server.send(ws, { msgid: 'gamemoduleinfo', totalwin: 50 });
+          server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+        }
+      });
+    });
+
+    it('should transition to WAITTING_PLAYER and wait for selection', async () => {
+      const stateChangeHandler = vi.fn();
+      client.on('state', stateChangeHandler);
+
+      // This spin should reject after the choice is made.
+      const spinPromise = client.spin({ bet: 1, lines: 10 });
+
+      await vi.waitFor(() => {
+        expect(client.getState()).toBe(ConnectionState.WAITTING_PLAYER);
+      });
+
+      const userInfo = client.getUserInfo();
+      expect(userInfo.optionals).toBeDefined();
+      expect(userInfo.optionals?.length).toBe(2);
+      expect(userInfo.optionals?.[0].command).toBe('bg-selectfg');
+      expect(userInfo.curSpinParams).toEqual({ bet: 1, lines: 10, times: 1 });
+
+      // Now, make a selection
+      const selectPromise = client.selectOptional(1);
+
+      // The original spin should now reject.
+      await expect(spinPromise).rejects.toThrow('Spin superseded by player choice requirement.');
+
+      // The selectOptional promise should resolve with the final win.
+      const result = await selectPromise;
+      expect(result.totalwin).toBe(50);
+
+      // And the final state should be SPINEND.
+      expect(client.getState()).toBe(ConnectionState.SPINEND);
+
+      // Check the full state transition sequence
+      expect(stateChangeHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ current: ConnectionState.SPINNING, previous: ConnectionState.IN_GAME })
+      );
+      expect(stateChangeHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ current: ConnectionState.WAITTING_PLAYER, previous: ConnectionState.SPINNING })
+      );
+      expect(stateChangeHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ current: ConnectionState.SPINNING, previous: ConnectionState.WAITTING_PLAYER })
+      );
+      expect(stateChangeHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ current: ConnectionState.SPINEND, previous: ConnectionState.SPINNING })
+      );
+    });
+  });
+
   describe('Error Handling and Edge Cases', () => {
     it('should emit an error for malformed JSON from server', async () => {
       await connectAndEnterGame();

@@ -180,6 +180,8 @@ export class SlotcraftClient {
       }
     }
     const ctrlparam = { autonums, bet, lines, times, ...rest };
+    // Cache the spin params for potential player choice follow-up
+    this.userInfo.curSpinParams = { bet, lines, times };
     this.setState(ConnectionState.SPINNING);
     return this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam }).then(() => {
       // By protocol, gamemoduleinfo should have arrived before cmdret.
@@ -240,6 +242,52 @@ export class SlotcraftClient {
       });
   }
 
+  public selectOptional(index: number): Promise<any> {
+    if (this.state !== ConnectionState.WAITTING_PLAYER) {
+      return Promise.reject(new Error(`Cannot selectOptional in state: ${this.state}`));
+    }
+    const { gameid, ctrlid, optionals, curSpinParams } = this.userInfo;
+    if (!gameid) return Promise.reject(new Error('gameid not available'));
+    if (!ctrlid) return Promise.reject(new Error('ctrlid not available'));
+    if (!optionals || !optionals[index]) {
+      return Promise.reject(new Error(`Invalid selection index: ${index}`));
+    }
+    if (!curSpinParams) {
+      return Promise.reject(new Error('Missing spin parameters for selection'));
+    }
+
+    // Manually clear the pending 'spin' request, as it's being superseded by this choice.
+    // Rejecting it allows any code awaiting the original spin() to unblock.
+    const pendingSpin = this.pendingRequests.get('gamectrl3');
+    if (pendingSpin) {
+      clearTimeout(pendingSpin.timer);
+      pendingSpin.reject(new Error('Spin superseded by player choice requirement.'));
+      this.pendingRequests.delete('gamectrl3');
+    }
+
+    const selection = optionals[index];
+    const ctrlparam = {
+      ...curSpinParams, // includes bet, lines, times
+      command: selection.command,
+      commandParam: selection.param,
+    };
+
+    // After selection, we expect to go back to spinning or a similar state
+    this.setState(ConnectionState.SPINNING);
+    return this.send('gamectrl3', {
+      gameid,
+      ctrlid,
+      ctrlname: 'selectfree',
+      ctrlparam,
+    }).then(() => {
+      // Similar to spin, return the latest GMI info
+      const gmi = this.userInfo.lastGMI;
+      const totalwin = this.userInfo.lastTotalWin ?? 0;
+      const results = this.userInfo.lastResultsCount ?? 0;
+      return { gmi, totalwin, results };
+    });
+  }
+
   // (spinUntilSpinEnd removed per request)
 
   public disconnect(): void {
@@ -272,6 +320,7 @@ export class SlotcraftClient {
       ConnectionState.SPINNING,
       ConnectionState.SPINEND,
       ConnectionState.COLLECTING,
+      ConnectionState.WAITTING_PLAYER,
     ];
 
     if (!allowedStates.includes(this.state)) {
@@ -449,8 +498,8 @@ export class SlotcraftClient {
           typeof msg.playIndex === 'number'
             ? msg.playIndex
             : typeof g.playIndex === 'number'
-              ? g.playIndex
-              : undefined;
+            ? g.playIndex
+            : undefined;
         if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
         const playwin =
           typeof msg.playwin === 'number'
@@ -473,7 +522,26 @@ export class SlotcraftClient {
             ? msg.results
             : undefined;
         if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
-        // Do not change state on passive messages; decisions occur on cmdret
+
+        // Handle player choice state transition
+        const { replyPlay } = g;
+        if (replyPlay && replyPlay.finished === false) {
+          const { nextCommands, nextCommandParams } = replyPlay;
+          if (
+            Array.isArray(nextCommands) &&
+            Array.isArray(nextCommandParams) &&
+            nextCommands.length === nextCommandParams.length &&
+            nextCommands.length > 0
+          ) {
+            this.userInfo.optionals = nextCommands.map((command, i) => ({
+              command,
+              param: nextCommandParams[i],
+            }));
+            // This is an exception to the "no state changes in updateCaches" rule.
+            // The protocol requires the client to halt and wait for user input here.
+            this.setState(ConnectionState.WAITTING_PLAYER, { gmi: g });
+          }
+        }
         break;
       }
       case 'gamecfg': {

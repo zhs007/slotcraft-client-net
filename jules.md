@@ -137,3 +137,20 @@
   - `jules/plan014.md`
   - `jules/plan014-report.md`
   - `tests/main-adv.test.ts`
+
+### 2025-09-04: Implement Player Choice State (Plan 015)
+
+- **目标**: 实现一个新的 `WAITTING_PLAYER` 状态，以处理游戏中需要玩家从服务器提供的选项中进行选择的场景。
+- **实施**:
+  - **新增状态与类型**:
+    - 在 `ConnectionState` 中添加了 `WAITTING_PLAYER` 状态。
+    - 在 `UserInfo` 中增加了 `optionals` 和 `curSpinParams` 字段，用于缓存玩家选项和当前的 spin 参数。
+  - **核心逻辑**:
+    - 修改了 `spin` 方法，使其缓存当前的下注参数。
+    - 在 `gamemoduleinfo` 消息处理器中增加了逻辑：当收到 `finished: false` 的响应时，客户端将自动转换到 `WAITTING_PLAYER` 状态并缓存可选项。
+    - 实现了新的 `selectOptional(index)` 方法，允许用户在 `WAITTING_PLAYER` 状态下发送带有 `ctrlname: 'selectfree'` 的 `gamectrl3` 消息来提交选择。
+  - **并发修复**: 解决了在玩家选择流程中，前一个 `spin` 的 `gamectrl3` 请求会与 `selectOptional` 的请求冲突的问题。通过在 `selectOptional` 中主动拒绝并清理被取代的 `spin` 请求，保证了通信流程的正确性。
+  - **测试**: 增加了专门的集成测试用例，模拟服务器发起玩家选择的完整流程，并验证了客户端的状态转换和方法调用。
+- **产出**:
+  - `jules/plan015.md`
+  - `jules/plan015-report.md`
