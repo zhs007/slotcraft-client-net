@@ -11,26 +11,26 @@ The game protocol specifies that after a `spin`, the server can return a `gamemo
 ## 3. Task Breakdown
 
 1.  **Update Type Definitions (`src/types.ts`):**
-    *   Add `WAITTING_PLAYER` to the `ConnectionState` enum.
-    *   Define a new `Optional` interface for the player choices.
-    *   Add `optionals?: Optional[]` and `curSpinParams?: SpinParams` to the `UserInfo` interface.
+    - Add `WAITTING_PLAYER` to the `ConnectionState` enum.
+    - Define a new `Optional` interface for the player choices.
+    - Add `optionals?: Optional[]` and `curSpinParams?: SpinParams` to the `UserInfo` interface.
 
 2.  **Modify `SlotcraftClient` (`src/main.ts`):**
-    *   **Cache Spin Parameters:** In the `spin` method, cache the `ctrlparam` object into `this.userInfo.curSpinParams`.
-    *   **Handle Player Choice State:** In the `updateCaches` method's `gamemoduleinfo` handler, check for `gmi.replyPlay.finished: false`. If true, populate `userInfo.optionals` and change the state to `WAITTING_PLAYER`.
-    *   **Implement `selectOptional` Method:** Create a new `public selectOptional(index: number)` method to send the `gamectrl3` message with `ctrlname: 'selectfree'` and the correct parameters based on the user's choice.
+    - **Cache Spin Parameters:** In the `spin` method, cache the `ctrlparam` object into `this.userInfo.curSpinParams`.
+    - **Handle Player Choice State:** In the `updateCaches` method's `gamemoduleinfo` handler, check for `gmi.replyPlay.finished: false`. If true, populate `userInfo.optionals` and change the state to `WAITTING_PLAYER`.
+    - **Implement `selectOptional` Method:** Create a new `public selectOptional(index: number)` method to send the `gamectrl3` message with `ctrlname: 'selectfree'` and the correct parameters based on the user's choice.
 
 3.  **Add Integration Test (`tests/integration.test.ts`):**
-    *   Create a new test case that simulates the server sending a player choice request.
-    *   Verify that the client enters the `WAITTING_PLAYER` state.
-    *   Verify that calling `selectOptional` sends the correct `gamectrl3` message to the server.
+    - Create a new test case that simulates the server sending a player choice request.
+    - Verify that the client enters the `WAITTING_PLAYER` state.
+    - Verify that calling `selectOptional` sends the correct `gamectrl3` message to the server.
 
 4.  **Run Checks and Verify:**
-    *   Run `npm run check` to ensure all linting, tests, and build checks pass.
+    - Run `npm run check` to ensure all linting, tests, and build checks pass.
 
 5.  **Update Documentation:**
-    *   Update `jules.md` with a summary of this feature in the development log.
-    *   Update `agents.md` to inform future agents about the new state and API.
+    - Update `jules.md` with a summary of this feature in the development log.
+    - Update `agents.md` to inform future agents about the new state and API.
 
 ## 4. Success Criteria
 

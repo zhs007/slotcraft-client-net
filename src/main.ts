@@ -79,17 +79,16 @@ export class SlotcraftClient {
   }
 
   public connect(token?: string): Promise<void> {
-    if (
-      this.state !== ConnectionState.IDLE &&
-      this.state !== ConnectionState.DISCONNECTED
-    ) {
+    if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
       return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
 
     // Use token from argument if provided, otherwise fall back to the one from constructor options.
     const tokenToUse = token || this.userInfo.token;
     if (!tokenToUse) {
-      return Promise.reject(new Error('Token must be provided either in the constructor or to connect()'));
+      return Promise.reject(
+        new Error('Token must be provided either in the constructor or to connect()')
+      );
     }
     // Cache token for auto-reconnects and the subsequent login call.
     this.userInfo.token = tokenToUse;
@@ -122,7 +121,9 @@ export class SlotcraftClient {
     // Use gamecode from argument if provided, otherwise fall back to the one from constructor options.
     const gamecodeToUse = gamecode || this.userInfo.gamecode;
     if (!gamecodeToUse) {
-      return Promise.reject(new Error('Game code must be provided either in the constructor or to enterGame()'));
+      return Promise.reject(
+        new Error('Game code must be provided either in the constructor or to enterGame()')
+      );
     }
     // Cache gamecode for context
     this.userInfo.gamecode = gamecodeToUse;
@@ -299,9 +300,7 @@ export class SlotcraftClient {
   public send(cmdid: string, params: any = {}): Promise<any> {
     // P1: Restrict commands during LOGGING_IN state.
     if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
-      return Promise.reject(
-        new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`)
-      );
+      return Promise.reject(new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`));
     }
 
     const allowedStates = [
@@ -322,9 +321,7 @@ export class SlotcraftClient {
 
     // P0: Prevent concurrent requests for the same cmdid.
     if (this.pendingRequests.has(cmdid)) {
-      return Promise.reject(
-        new Error(`A request with cmdid '${cmdid}' is already pending.`)
-      );
+      return Promise.reject(new Error(`A request with cmdid '${cmdid}' is already pending.`));
     }
 
     const message = JSON.stringify({ cmdid, ...params });
@@ -501,8 +498,8 @@ export class SlotcraftClient {
           typeof msg.playIndex === 'number'
             ? msg.playIndex
             : typeof g.playIndex === 'number'
-            ? g.playIndex
-            : undefined;
+              ? g.playIndex
+              : undefined;
         if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
         const playwin =
           typeof msg.playwin === 'number'

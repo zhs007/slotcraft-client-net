@@ -93,9 +93,7 @@ describe('SlotcraftClient (Real Timers)', () => {
   describe('Actions in incorrect states', () => {
     it('should not allow send() when not authenticated', async () => {
       expect(client.getState()).toBe(ConnectionState.IDLE);
-      await expect(client.send('any_cmd')).rejects.toThrow(
-        'Cannot send message in state: IDLE'
-      );
+      await expect(client.send('any_cmd')).rejects.toThrow('Cannot send message in state: IDLE');
 
       const connectPromise = client.connect(TEST_TOKEN);
       expect(client.getState()).toBe(ConnectionState.CONNECTING);

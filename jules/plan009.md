@@ -17,11 +17,11 @@ A real-time communication log is available in `docs/msg001.txt`, which provides 
 - Create a new file `tests/mock-server.ts`.
 - Implement a `MockServer` class using the `ws` library.
 - The server will support:
-    - Starting and stopping on a dynamic port.
-    - Handling incoming client connections.
-    - A request-handler mechanism to define responses for specific `cmdid`s.
-    - Methods to programmatically send server-initiated (passive) messages.
-    - Methods to forcefully disconnect clients to test reconnection.
+  - Starting and stopping on a dynamic port.
+  - Handling incoming client connections.
+  - A request-handler mechanism to define responses for specific `cmdid`s.
+  - Methods to programmatically send server-initiated (passive) messages.
+  - Methods to forcefully disconnect clients to test reconnection.
 
 ### Step 2: Create New Integration Test Suite (`tests/integration.test.ts`)
 
@@ -32,26 +32,26 @@ A real-time communication log is available in `docs/msg001.txt`, which provides 
 ### Step 3: Implement Integration Tests
 
 - **Connection & Login:**
-    - Test successful connection and login flow.
-    - Test login failure due to bad tokens (`isok: false`).
-    - Test connection timeout/failure.
+  - Test successful connection and login flow.
+  - Test login failure due to bad tokens (`isok: false`).
+  - Test connection timeout/failure.
 - **Game Lifecycle:**
-    - Test the `enterGame` flow.
-    - Test that `gamecfg`, `gameuserinfo`, etc., are correctly received and cached by the client.
+  - Test the `enterGame` flow.
+  - Test that `gamecfg`, `gameuserinfo`, etc., are correctly received and cached by the client.
 - **Spin & Collect:**
-    - Test a successful spin-win-collect cycle, verifying state transitions (`SPINNING` -> `SPINEND` -> `COLLECTING` -> `IN_GAME`).
-    - Test a spin with no win (`SPINNING` -> `IN_GAME`).
-    - Test the `collect` logic when `lastResultsCount` indicates multiple collections are needed.
+  - Test a successful spin-win-collect cycle, verifying state transitions (`SPINNING` -> `SPINEND` -> `COLLECTING` -> `IN_GAME`).
+  - Test a spin with no win (`SPINNING` -> `IN_GAME`).
+  - Test the `collect` logic when `lastResultsCount` indicates multiple collections are needed.
 - **Error & Edge Cases:**
-    - Test request timeouts for commands sent by the client.
-    - Test how the client handles malformed JSON from the server.
-    - Test the full reconnection flow:
-        - Server disconnects unexpectedly.
-        - Client enters `RECONNECTING` state.
-        - Client successfully reconnects after a few attempts.
-        - Client gives up after `maxReconnectAttempts`.
+  - Test request timeouts for commands sent by the client.
+  - Test how the client handles malformed JSON from the server.
+  - Test the full reconnection flow:
+    - Server disconnects unexpectedly.
+    - Client enters `RECONNECTING` state.
+    - Client successfully reconnects after a few attempts.
+    - Client gives up after `maxReconnectAttempts`.
 - **Data Caching:**
-    - Write specific tests to ensure all parts of the `updateCaches` method in `src/main.ts` are covered by sending various passive messages from the mock server.
+  - Write specific tests to ensure all parts of the `updateCaches` method in `src/main.ts` are covered by sending various passive messages from the mock server.
 
 ### Step 4: Measure Coverage and Iterate
 

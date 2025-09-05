@@ -7,6 +7,7 @@
 ## 概览
 
 本次再次对库进行全面评审，并在本地实际运行了 Lint/Typecheck/Build/Tests，结合覆盖率输出进行结论校验。整体代码质量较高：模块职责清晰、状态机明确、错误与重连路径覆盖较完善，测试与集成测试健全。与上次报告相比，明显的改进包括：
+
 - 定时器类型已统一为 `ReturnType<typeof setTimeout/setInterval>`，浏览器/Node 双栈更友好。
 - `connect()` 的防重入逻辑更严格，仅在 IDLE/DISCONNECTED 才允许，避免中途破坏连接流程。
 - 新增 `index.ts` 作为公共出口，已统一导出 `SlotcraftClient` 与类型。
@@ -55,18 +56,18 @@
   - 缓存策略合理：`userbaseinfo/gamecfg/gameuserinfo/gamemoduleinfo` 更新到 `userInfo`，`spin/collect` 在 `cmdret` 与缓存配合进行状态驱动，降低对“被动消息时序”的耦合。
 
 - 重要风险与改进建议
-  1) 并发请求关联问题（建议：P0）
+  1. 并发请求关联问题（建议：P0）
      - 现使用 `pendingRequests: Map<string, PendingRequest>`，以 `cmdid` 为 key。若同一 `cmdid` 并发发送（例如业务层误用 `send('gamectrl3')` 两次），后一次会覆盖前一次的 promise 记录，导致错配或悬挂。
      - 方案选项：
        - A. 在客户端注入“关联 ID”（如 `reqid`），出站消息包含 `reqid`，服务端回 `cmdret` 回传 `reqid`；客户端以 `(cmdid, reqid)` 做 key（需协议支持）。
        - B. 若协议不支持 `reqid`，则在库内对部分 `cmdid` 做“同类串行化/去重”保护：同 `cmdid` 存在未决请求时，直接拒绝或排队，直到前一个完成。
        - C. 至少对公开 API（`spin/collect/enterGame`）进行内部串行化，防止竞态调用；对 `send()` 在文档中明确“可能覆盖同 `cmdid` 未决请求”，或在 LOGGING_IN/ENTERING_GAME/IN_GAME 的关键阶段禁止重复发送同 `cmdid`。
 
-  2) `LOGGING_IN` 时允许任意 `send()`（建议：P1）
+  2. `LOGGING_IN` 时允许任意 `send()`（建议：P1）
      - 代码注释写明仅允许登录命令，但实现未强制：`allowedStates` 包含 `LOGGING_IN`，却未校验 `cmdid === 'flblogin'`。
      - 建议：在 `LOGGING_IN` 阶段仅放行 `flblogin`，其余命令直接拒绝，减少异常状态请求。
 
-  3) JSON 解析重复（建议：P2）
+  3. JSON 解析重复（建议：P2）
      - `handleMessage()` 中对 `event.data` 至少 `JSON.parse` 了 2~3 次：
        ```ts
        const messages = Array.isArray(JSON.parse(event.data))
@@ -75,10 +76,10 @@
        ```
      - 建议：只 parse 一次并缓存结果：`const parsed = JSON.parse(event.data); const messages = Array.isArray(parsed) ? parsed : [parsed];`。可读性与性能更优，也减少“部分 parse 成功/失败”的不一致风险。
 
-  4) `collect()` 的序列推导（建议：P2）
+  4. `collect()` 的序列推导（建议：P2）
      - 目前根据 `resultsCount`、`lastPlayIndex` 推导 `[resultsCount - 1, resultsCount]` 或 `[1]` 等序列，具体是否吻合协议需要确认。若协议层明确“多段结果需要顺序 `1..N` 收集”，则建议在注释中写清楚推导依据，或改为更直观的 `for (i=1..N)`（若语义一致）。
 
-  5) 可观测性与可用性（建议：P2）
+  5. 可观测性与可用性（建议：P2）
      - 心跳/重连日志在单测输出中出现，CI 可考虑默认 `logger: null` 或在 logger 中打标签便于过滤。
      - 建议在 Vitest 配置中加入覆盖率阈值（lines > 90% 等）强化质量门槛，并将 `src/index.ts` 从覆盖统计中排除，避免噪音。
 

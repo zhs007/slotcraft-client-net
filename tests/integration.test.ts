@@ -224,10 +224,22 @@ describe('SlotcraftClient Integration Tests', () => {
 
       // 5. Verify the full state transition sequence
       const calls = stateChangeHandler.mock.calls;
-      expect(calls[0][0]).toMatchObject({ current: ConnectionState.SPINNING, previous: ConnectionState.IN_GAME });
-      expect(calls[1][0]).toMatchObject({ current: ConnectionState.WAITTING_PLAYER, previous: ConnectionState.SPINNING });
-      expect(calls[2][0]).toMatchObject({ current: ConnectionState.PLAYER_CHOICING, previous: ConnectionState.WAITTING_PLAYER });
-      expect(calls[3][0]).toMatchObject({ current: ConnectionState.SPINEND, previous: ConnectionState.PLAYER_CHOICING });
+      expect(calls[0][0]).toMatchObject({
+        current: ConnectionState.SPINNING,
+        previous: ConnectionState.IN_GAME,
+      });
+      expect(calls[1][0]).toMatchObject({
+        current: ConnectionState.WAITTING_PLAYER,
+        previous: ConnectionState.SPINNING,
+      });
+      expect(calls[2][0]).toMatchObject({
+        current: ConnectionState.PLAYER_CHOICING,
+        previous: ConnectionState.WAITTING_PLAYER,
+      });
+      expect(calls[3][0]).toMatchObject({
+        current: ConnectionState.SPINEND,
+        previous: ConnectionState.PLAYER_CHOICING,
+      });
     });
   });
 

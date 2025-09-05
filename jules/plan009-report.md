@@ -23,11 +23,11 @@ The final test coverage for the `src` directory is **91.6%**.
 
 - I created a new test suite, `tests/integration.test.ts`, to house the new tests.
 - I incrementally added tests covering:
-    - Connection and login flows (success and failure).
-    - In-game flows (entering a game, spinning).
-    - The `collect` logic with various scenarios.
-    - State validation and input validation.
-    - Error handling for malformed server messages.
+  - Connection and login flows (success and failure).
+  - In-game flows (entering a game, spinning).
+  - The `collect` logic with various scenarios.
+  - State validation and input validation.
+  - Error handling for malformed server messages.
 
 ### 2.4. Challenges and Solutions
 
