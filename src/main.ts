@@ -182,6 +182,7 @@ export class SlotcraftClient {
     const ctrlparam = { autonums, bet, lines, times, ...rest };
     // Cache the spin params for potential player choice follow-up
     this.userInfo.curSpinParams = { bet, lines, times };
+    this.userInfo.optionals = [];
     this.setState(ConnectionState.SPINNING);
     return this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam }).then(() => {
       // By protocol, gamemoduleinfo should have arrived before cmdret.

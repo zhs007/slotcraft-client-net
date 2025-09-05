@@ -105,23 +105,6 @@ const main = async () => {
     } catch (err) {
       console.error(`Failed to write state to log file ${LOG_FILE}:`, err);
     }
-
-    // Handle WAITTING_PLAYER state
-    if (current === 'WAITTING_PLAYER') {
-      console.log('Detected WAITTING_PLAYER state. Checking for optionals...');
-      const userInfo = client.getUserInfo();
-      if (userInfo.optionals && userInfo.optionals.length > 0) {
-        const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
-        console.log(`Randomly selecting optional index: ${randomIndex}`);
-        client.selectOptional(randomIndex).catch((err) => {
-          console.error('Failed to select optional:', err);
-          client.disconnect();
-        });
-      } else {
-        console.warn('WAITTING_PLAYER state but no optionals found. Disconnecting.');
-        client.disconnect();
-      }
-    }
   };
   client.on('state', onState as any);
 
@@ -141,7 +124,21 @@ const main = async () => {
         console.log(`--- Lines=${lines} ---`);
         for (let i = 0; i < 100; i++) {
           console.log(`Spin #${i + 1}/100 with lines=${lines}...`);
-          const { totalwin, results } = (await client.spin({ lines })) as any;
+          let { totalwin, results } = (await client.spin({ lines })) as any;
+
+          const userInfo = client.getUserInfo();
+          if (userInfo.optionals && userInfo.optionals.length > 0) {
+            const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+            console.log(`Randomly selecting optional index: ${randomIndex}`);
+            const newret = (await client.selectOptional(randomIndex).catch((err) => {
+              console.error('Failed to select optional:', err);
+              client.disconnect();
+            })) as any;
+
+            totalwin = newret.totalwin;
+            results = newret.results;
+          }
+
           if (totalwin > 0) {
             console.log(
               `Win detected. totalwin=${totalwin}, results=${results}. Will collect to continue...`
