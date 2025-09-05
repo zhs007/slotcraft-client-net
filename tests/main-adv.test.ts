@@ -3,7 +3,7 @@ import { SlotcraftClient, ConnectionState } from '../src/index';
 import { MockServer } from './mock-server';
 import { SlotcraftClientOptions } from '../src/types';
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('SlotcraftClient Advanced Tests', () => {
   let server: MockServer;
@@ -33,26 +33,26 @@ describe('SlotcraftClient Advanced Tests', () => {
 
   const connectAndLogin = async () => {
     server.on('flblogin', (msg, ws) => {
-        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
     });
     await client.connect('test-token');
   };
 
   const connectAndEnterGame = async () => {
-      await connectAndLogin();
-      server.on('comeingame3', (msg, ws) => {
-        server.send(ws, { msgid: 'gamemoduleinfo', gameid: 123 });
-        server.send(ws, { msgid: 'gameuserinfo', ctrlid: 456 });
-        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
-      });
-      await client.enterGame('test-game');
+    await connectAndLogin();
+    server.on('comeingame3', (msg, ws) => {
+      server.send(ws, { msgid: 'gamemoduleinfo', gameid: 123 });
+      server.send(ws, { msgid: 'gameuserinfo', ctrlid: 456 });
+      server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+    });
+    await client.enterGame('test-game');
   };
 
   it('should reject a concurrent send() with the same cmdid', async () => {
     await connectAndLogin();
 
     server.on('test_cmd', () => {
-        // Don't respond immediately, to simulate a pending request
+      // Don't respond immediately, to simulate a pending request
     });
 
     // Ensure we are in a state where send is allowed
@@ -62,9 +62,7 @@ describe('SlotcraftClient Advanced Tests', () => {
     await sleep(10); // give time for the first message to be sent
     const promise2 = client.send('test_cmd', { val: 2 });
 
-    await expect(promise2).rejects.toThrow(
-      "A request with cmdid 'test_cmd' is already pending."
-    );
+    await expect(promise2).rejects.toThrow("A request with cmdid 'test_cmd' is already pending.");
 
     // Clean up
     server.broadcast({ msgid: 'cmdret', cmdid: 'test_cmd', isok: true });
@@ -73,16 +71,14 @@ describe('SlotcraftClient Advanced Tests', () => {
 
   it('should reject non-login commands during LOGGING_IN state', async () => {
     server.on('flblogin', () => {
-        // Don't respond immediately, to keep the client in LOGGING_IN state
+      // Don't respond immediately, to keep the client in LOGGING_IN state
     });
     const connectPromise = client.connect('test-token');
     await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGING_IN));
 
     const promise = client.send('any_other_command');
 
-    await expect(promise).rejects.toThrow(
-      "Only 'flblogin' is allowed during LOGGING_IN state."
-    );
+    await expect(promise).rejects.toThrow("Only 'flblogin' is allowed during LOGGING_IN state.");
 
     // Clean up
     server.broadcast({ msgid: 'cmdret', cmdid: 'flblogin', isok: true });
@@ -105,7 +101,7 @@ describe('SlotcraftClient Advanced Tests', () => {
       const calls = jsonParseSpy.mock.calls;
       // This is a bit brittle, but confirms the client code doesn't double-parse.
       // The client's call is the one inside the message event handler.
-      expect(calls.filter(c => c[0] === JSON.stringify(singleMessage)).length).toBe(1);
+      expect(calls.filter((c) => c[0] === JSON.stringify(singleMessage)).length).toBe(1);
     });
 
     jsonParseSpy.mockRestore();
@@ -115,15 +111,19 @@ describe('SlotcraftClient Advanced Tests', () => {
     await connectAndEnterGame();
 
     server.on('gamectrl3', (msg, ws) => {
-        server.send(ws, { msgid: 'gamemoduleinfo', gmi: { replyPlay: { results: [{}, {}, {}] } }, totalwin: 10 });
-        server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+      server.send(ws, {
+        msgid: 'gamemoduleinfo',
+        gmi: { replyPlay: { results: [{}, {}, {}] } },
+        totalwin: 10,
+      });
+      server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
     });
 
     await client.spin({ bet: 1, lines: 1 });
     await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.SPINEND));
 
     const collectHandler = vi.fn((msg, ws) => {
-        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
+      server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
     });
     server.on('collect', collectHandler);
 

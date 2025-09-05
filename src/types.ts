@@ -20,10 +20,14 @@ export enum ConnectionState {
   ENTERING_GAME = 'ENTERING_GAME',
   /** The client is in a game and ready to send/receive game messages. */
   IN_GAME = 'IN_GAME',
+  /** The client is waiting for the player to make a selection. */
+  WAITTING_PLAYER = 'WAITTING_PLAYER',
   /** The client finished a spin and waits for collect decision. */
   SPINEND = 'SPINEND',
   /** A spin (gamectrl3) is in flight. */
   SPINNING = 'SPINNING',
+  /** A player selection (gamectrl3) is in flight. */
+  PLAYER_CHOICING = 'PLAYER_CHOICING',
   /** A collect command is in flight after a win. */
   COLLECTING = 'COLLECTING',
   /** The client is disconnected and will attempt to reconnect. */
@@ -136,6 +140,17 @@ export interface UserInfo {
   lastResultsCount?: number; // replyPlay.results.length
   // Last full gamemoduleinfo payload
   lastGMI?: any;
+  // Player choice context
+  optionals?: Optional[];
+  curSpinParams?: SpinParams;
+}
+
+/**
+ * Defines the structure for a player's optional choice.
+ */
+export interface Optional {
+  command: string;
+  param: string;
 }
 
 /**

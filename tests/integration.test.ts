@@ -171,6 +171,78 @@ describe('SlotcraftClient Integration Tests', () => {
     });
   });
 
+  describe('Player Choice Flow', () => {
+    it('should correctly follow the full player choice flow', async () => {
+      // 1. Setup mock server handlers for the entire sequence
+      server.on('gamectrl3', (msg, ws) => {
+        // The initial spin action
+        if (msg.ctrlname === 'spin') {
+          // Server sends gmi with choice options first
+          server.send(ws, {
+            msgid: 'gamemoduleinfo',
+            gmi: {
+              replyPlay: {
+                nextCommands: ['bg-selectfg', 'bg-selectfg'],
+                nextCommandParams: ['lefty-bugsy-lefty', 'lefty-bugsy-bugsy'],
+                finished: false,
+              },
+            },
+          });
+          // Then, server confirms the command is ok
+          server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+        }
+        // The follow-up selection action
+        else if (msg.ctrlname === 'selectfree') {
+          expect(msg.ctrlparam.command).toBe('bg-selectfg');
+          expect(msg.ctrlparam.commandParam).toBe('lefty-bugsy-bugsy');
+          // Server sends final gmi with win info
+          server.send(ws, { msgid: 'gamemoduleinfo', totalwin: 50 });
+          // Then, server confirms the command is ok
+          server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+        }
+      });
+
+      await connectAndEnterGame();
+      const stateChangeHandler = vi.fn();
+      client.on('state', stateChangeHandler);
+
+      // 2. Initial spin, should resolve and lead to WAITTING_PLAYER
+      await client.spin({ bet: 1, lines: 10 });
+      expect(client.getState()).toBe(ConnectionState.WAITTING_PLAYER);
+
+      // 3. Verify user info is correctly cached
+      const userInfo = client.getUserInfo();
+      expect(userInfo.optionals).toBeDefined();
+      expect(userInfo.optionals?.length).toBe(2);
+      expect(userInfo.optionals?.[1].param).toBe('lefty-bugsy-bugsy');
+      expect(userInfo.curSpinParams).toEqual({ bet: 1, lines: 10, times: 1 });
+
+      // 4. Make selection and await the result
+      const result = await client.selectOptional(1);
+      expect(result.totalwin).toBe(50);
+      expect(client.getState()).toBe(ConnectionState.SPINEND);
+
+      // 5. Verify the full state transition sequence
+      const calls = stateChangeHandler.mock.calls;
+      expect(calls[0][0]).toMatchObject({
+        current: ConnectionState.SPINNING,
+        previous: ConnectionState.IN_GAME,
+      });
+      expect(calls[1][0]).toMatchObject({
+        current: ConnectionState.WAITTING_PLAYER,
+        previous: ConnectionState.SPINNING,
+      });
+      expect(calls[2][0]).toMatchObject({
+        current: ConnectionState.PLAYER_CHOICING,
+        previous: ConnectionState.WAITTING_PLAYER,
+      });
+      expect(calls[3][0]).toMatchObject({
+        current: ConnectionState.SPINEND,
+        previous: ConnectionState.PLAYER_CHOICING,
+      });
+    });
+  });
+
   describe('Error Handling and Edge Cases', () => {
     it('should emit an error for malformed JSON from server', async () => {
       await connectAndEnterGame();

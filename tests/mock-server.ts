@@ -3,11 +3,7 @@ import { AddressInfo } from 'net';
 
 // A handler function for incoming messages.
 // It can optionally send a response back to the client.
-type MessageHandler = (
-  msg: any,
-  ws: WebSocket,
-  server: MockServer
-) => void | Promise<void>;
+type MessageHandler = (msg: any, ws: WebSocket, server: MockServer) => void | Promise<void>;
 
 /**
  * A mock WebSocket server for testing the SlotcraftClient.

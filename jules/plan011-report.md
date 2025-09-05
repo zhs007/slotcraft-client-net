@@ -11,8 +11,8 @@ This report documents the execution of the tasks outlined in `plan011.md`.
 
 ### Execution Details
 
-*(This section will be filled in as tasks are completed.)*
+_(This section will be filled in as tasks are completed.)_
 
 ### Final State
 
-*(This section will be filled in upon completion.)*
+_(This section will be filled in upon completion.)_

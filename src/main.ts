@@ -79,17 +79,16 @@ export class SlotcraftClient {
   }
 
   public connect(token?: string): Promise<void> {
-    if (
-      this.state !== ConnectionState.IDLE &&
-      this.state !== ConnectionState.DISCONNECTED
-    ) {
+    if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
       return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
     }
 
     // Use token from argument if provided, otherwise fall back to the one from constructor options.
     const tokenToUse = token || this.userInfo.token;
     if (!tokenToUse) {
-      return Promise.reject(new Error('Token must be provided either in the constructor or to connect()'));
+      return Promise.reject(
+        new Error('Token must be provided either in the constructor or to connect()')
+      );
     }
     // Cache token for auto-reconnects and the subsequent login call.
     this.userInfo.token = tokenToUse;
@@ -122,7 +121,9 @@ export class SlotcraftClient {
     // Use gamecode from argument if provided, otherwise fall back to the one from constructor options.
     const gamecodeToUse = gamecode || this.userInfo.gamecode;
     if (!gamecodeToUse) {
-      return Promise.reject(new Error('Game code must be provided either in the constructor or to enterGame()'));
+      return Promise.reject(
+        new Error('Game code must be provided either in the constructor or to enterGame()')
+      );
     }
     // Cache gamecode for context
     this.userInfo.gamecode = gamecodeToUse;
@@ -180,6 +181,9 @@ export class SlotcraftClient {
       }
     }
     const ctrlparam = { autonums, bet, lines, times, ...rest };
+    // Cache the spin params for potential player choice follow-up
+    this.userInfo.curSpinParams = { bet, lines, times };
+    this.userInfo.optionals = [];
     this.setState(ConnectionState.SPINNING);
     return this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam }).then(() => {
       // By protocol, gamemoduleinfo should have arrived before cmdret.
@@ -240,6 +244,43 @@ export class SlotcraftClient {
       });
   }
 
+  public selectOptional(index: number): Promise<any> {
+    if (this.state !== ConnectionState.WAITTING_PLAYER) {
+      return Promise.reject(new Error(`Cannot selectOptional in state: ${this.state}`));
+    }
+    const { gameid, ctrlid, optionals, curSpinParams } = this.userInfo;
+    if (!gameid) return Promise.reject(new Error('gameid not available'));
+    if (!ctrlid) return Promise.reject(new Error('ctrlid not available'));
+    if (!optionals || !optionals[index]) {
+      return Promise.reject(new Error(`Invalid selection index: ${index}`));
+    }
+    if (!curSpinParams) {
+      return Promise.reject(new Error('Missing spin parameters for selection'));
+    }
+
+    const selection = optionals[index];
+    const ctrlparam = {
+      ...curSpinParams, // includes bet, lines, times
+      command: selection.command,
+      commandParam: selection.param,
+    };
+
+    // After selection, we are in a new "choicing" state, awaiting the result.
+    this.setState(ConnectionState.PLAYER_CHOICING);
+    return this.send('gamectrl3', {
+      gameid,
+      ctrlid,
+      ctrlname: 'selectfree',
+      ctrlparam,
+    }).then(() => {
+      // Similar to spin, return the latest GMI info
+      const gmi = this.userInfo.lastGMI;
+      const totalwin = this.userInfo.lastTotalWin ?? 0;
+      const results = this.userInfo.lastResultsCount ?? 0;
+      return { gmi, totalwin, results };
+    });
+  }
+
   // (spinUntilSpinEnd removed per request)
 
   public disconnect(): void {
@@ -259,9 +300,7 @@ export class SlotcraftClient {
   public send(cmdid: string, params: any = {}): Promise<any> {
     // P1: Restrict commands during LOGGING_IN state.
     if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
-      return Promise.reject(
-        new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`)
-      );
+      return Promise.reject(new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`));
     }
 
     const allowedStates = [
@@ -270,8 +309,10 @@ export class SlotcraftClient {
       ConnectionState.ENTERING_GAME,
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
+      ConnectionState.PLAYER_CHOICING,
       ConnectionState.SPINEND,
       ConnectionState.COLLECTING,
+      ConnectionState.WAITTING_PLAYER,
     ];
 
     if (!allowedStates.includes(this.state)) {
@@ -280,9 +321,7 @@ export class SlotcraftClient {
 
     // P0: Prevent concurrent requests for the same cmdid.
     if (this.pendingRequests.has(cmdid)) {
-      return Promise.reject(
-        new Error(`A request with cmdid '${cmdid}' is already pending.`)
-      );
+      return Promise.reject(new Error(`A request with cmdid '${cmdid}' is already pending.`));
     }
 
     const message = JSON.stringify({ cmdid, ...params });
@@ -387,10 +426,20 @@ export class SlotcraftClient {
           // Drive state transitions on cmdret where applicable
           switch (msg.cmdid) {
             case 'gamectrl3': {
-              // Spin ended: decide new state based on cached totals
+              const gmi = this.userInfo.lastGMI;
+              const totalwin = this.userInfo.lastTotalWin ?? 0;
+
               if (this.state === ConnectionState.SPINNING) {
-                const totalwin = this.userInfo.lastTotalWin ?? 0;
-                const gmi = this.userInfo.lastGMI;
+                // For a standard spin, check if it resulted in a player choice scenario.
+                if (gmi?.replyPlay?.finished === false) {
+                  this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+                } else if (totalwin > 0) {
+                  this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+                } else {
+                  this.setState(ConnectionState.IN_GAME);
+                }
+              } else if (this.state === ConnectionState.PLAYER_CHOICING) {
+                // After a player choice, decide the outcome.
                 if (totalwin > 0) {
                   this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
                 } else {
@@ -473,7 +522,23 @@ export class SlotcraftClient {
             ? msg.results
             : undefined;
         if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
-        // Do not change state on passive messages; decisions occur on cmdret
+
+        // Handle player choice options caching
+        const { replyPlay } = g;
+        if (replyPlay && replyPlay.finished === false) {
+          const { nextCommands, nextCommandParams } = replyPlay;
+          if (
+            Array.isArray(nextCommands) &&
+            Array.isArray(nextCommandParams) &&
+            nextCommands.length === nextCommandParams.length &&
+            nextCommands.length > 0
+          ) {
+            this.userInfo.optionals = nextCommands.map((command, i) => ({
+              command,
+              param: nextCommandParams[i],
+            }));
+          }
+        }
         break;
       }
       case 'gamecfg': {
