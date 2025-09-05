@@ -96,7 +96,7 @@ const main = async () => {
   });
 
   // Listen to state changes: log state transitions and append to LOG_FILE with a clear marker
-  const onState = ({ current }: { current: string }) => {
+  const onState = ({ current, data }: { current: string; data?: any }) => {
     console.log(`State change: ${current}`);
     const ts = new Date().toISOString();
     const entry = `[STATE] ${ts}: ${current}\n\n`;
@@ -104,6 +104,23 @@ const main = async () => {
       fs.appendFileSync(LOG_FILE, entry);
     } catch (err) {
       console.error(`Failed to write state to log file ${LOG_FILE}:`, err);
+    }
+
+    // Handle WAITTING_PLAYER state
+    if (current === 'WAITTING_PLAYER') {
+      console.log('Detected WAITTING_PLAYER state. Checking for optionals...');
+      const userInfo = client.getUserInfo();
+      if (userInfo.optionals && userInfo.optionals.length > 0) {
+        const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+        console.log(`Randomly selecting optional index: ${randomIndex}`);
+        client.selectOptional(randomIndex).catch((err) => {
+          console.error('Failed to select optional:', err);
+          client.disconnect();
+        });
+      } else {
+        console.warn('WAITTING_PLAYER state but no optionals found. Disconnecting.');
+        client.disconnect();
+      }
     }
   };
   client.on('state', onState as any);
@@ -122,15 +139,10 @@ const main = async () => {
 
       for (const lines of opts) {
         console.log(`--- Lines=${lines} ---`);
-        let seenWin = false;
-        let seenLose = false;
-        let attempts = 0;
-        while (!(seenWin && seenLose) && attempts < 50) {
-          attempts++;
-          console.log(`Spin #${attempts} with lines=${lines}...`);
+        for (let i = 0; i < 100; i++) {
+          console.log(`Spin #${i + 1}/100 with lines=${lines}...`);
           const { totalwin, results } = (await client.spin({ lines })) as any;
           if (totalwin > 0) {
-            seenWin = true;
             console.log(
               `Win detected. totalwin=${totalwin}, results=${results}. Will collect to continue...`
             );
@@ -143,15 +155,8 @@ const main = async () => {
               break;
             }
           } else {
-            seenLose = true;
             console.log('No win on this spin.');
           }
-          // spin already waited for cmdret and returned the summarized result
-        }
-        if (!(seenWin && seenLose)) {
-          console.warn(
-            `Stopping early on lines=${lines} after ${attempts} attempts (did not observe both win and no-win).`
-          );
         }
       }
       console.log('Finished spinning across all lines. Disconnecting.');

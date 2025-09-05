@@ -154,3 +154,13 @@
 - **产出**:
   - `jules/plan015.md`
   - `jules/plan015-report.md`
+
+### 2025-09-04: Update Example Script Logic (Plan 016)
+
+- **目标**: 更新 `examples/example001.ts` 示例脚本，以演示新功能并调整测试逻辑。
+- **实施**:
+  - **处理 `WAITTING_PLAYER` 状态**: 在示例脚本中增加了对 `state` 事件的监听。当状态变为 `WAITTING_PLAYER` 时，脚本会自动从 `UserInfo` 中获取可用选项，并随机选择一个执行 `selectOptional`。
+  - **修改 Spin 逻辑**: 调整了 `spinAcrossLines` 函数的行为。原有的逻辑是“直到出现一次赢和一次输”后停止，现修改为对每个下注线数固定执行 100 次 spin，使其更适合用于压力测试或长时间挂机场景。
+- **产出**:
+  - `jules/plan016.md`
+  - `jules/plan016-report.md`
