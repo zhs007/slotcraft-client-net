@@ -28,7 +28,7 @@ import { ConnectionState, RawMessagePayload } from '../src/types';
 
 dotenv.config();
 
-const { WEBSOCKET_URL, TOKEN, GAME_CODE } = process.env;
+const { WEBSOCKET_URL, TOKEN, GAME_CODE, BUSINESSID } = process.env;
 const LOG_FILE = 'msg001.txt';
 
 if (!WEBSOCKET_URL || !TOKEN || !GAME_CODE) {
@@ -62,6 +62,7 @@ const main = async () => {
     url: WEBSOCKET_URL,
     token: TOKEN,
     gamecode: GAME_CODE,
+    businessid: BUSINESSID || 'default',
   });
 
   // Setup logging
