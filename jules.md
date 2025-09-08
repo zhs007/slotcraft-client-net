@@ -241,3 +241,17 @@
 - **产出**:
   - `jules/plan020.md`
   - `jules/plan020-report.md`
+
+### 2025-09-08: Enhance Example Script for Resume Logic (Plan 021)
+
+- **目标**: 改进 `examples/example001.ts` 示例脚本，使其能够正确处理 `enterGame` 后可能出现的各种游戏恢复状态。
+- **实施**:
+  - **引入游戏循环**: 在示例脚本中实现了一个 `gameLoop` 函数。该函数在 `enterGame` 之后被调用，并负责根据客户端的当前状态 (`SPINEND`, `WAITTING_PLAYER`, `IN_GAME`) 决定下一步操作。
+  - **状态驱动逻辑**:
+    - 如果状态是 `SPINEND`，脚本会自动调用 `client.collect()`。
+    - 如果状态是 `WAITTING_PLAYER`，脚本会自动调用 `client.selectOptional()`。
+    - 只有当状态是 `IN_GAME` 时，脚本才会执行主要的 `spinAcrossLines` 逻辑。
+  - **提升健壮性**: 此修改使示例脚本对游戏恢复流程的处理更加健壮，为开发者提供了更准确、更可靠的用例参考。
+- **产出**:
+  - `jules/plan021.md`
+  - `jules/plan021-report.md`
