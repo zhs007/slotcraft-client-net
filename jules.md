@@ -229,3 +229,15 @@
 - **产出**:
   - `jules/plan019.md`
   - `jules/plan019-report.md`
+
+### 2025-09-08: Implement Game Resume Logic (Plan 020)
+
+- **目标**: 实现“游戏恢复”（Resume）功能。当用户 `enterGame` 时，如果服务器返回一个未完成的游戏状态（例如，有待收集的奖励或待做的选择），客户端需要能正确地恢复到该状态。
+- **实施**:
+  - **新增 `RESUMING` 状态**: 在 `ConnectionState` 中加入了 `RESUMING` 状态，用于明确表示客户端正在处理 `comeingame` 的响应。`enterGame` 方法现在会进入此状态。
+  - **`cmdret` 驱动状态恢复**: 核心恢复逻辑被实现在 `comeingame3` 的 `cmdret` 处理器中。此处理器会检查 `gamemoduleinfo` 的内容，并根据 `replyPlay.finished` 和 `totalwin` 等字段，决定将客户端转换到 `WAITTING_PLAYER`、`SPINEND` 还是 `IN_GAME` 状态。这确保了状态转换的原子性和准确性。
+  - **复用 Auto-Collect**: 在恢复流程中，如果检测到有多个待处理结果，会自动复用现有的 `auto-collect` 逻辑来确认中间结果，优化了用户体验。
+  - **补充注释和测试**: 为新的状态和逻辑流程补充了详尽的 JSDoc 注释，并新增了专门的集成测试用例来验证所有恢复场景。
+- **产出**:
+  - `jules/plan020.md`
+  - `jules/plan020-report.md`

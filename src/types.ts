@@ -18,6 +18,8 @@ export enum ConnectionState {
   LOGGED_IN = 'LOGGED_IN',
   /** The client is in the process of entering a game. */
   ENTERING_GAME = 'ENTERING_GAME',
+  /** The client has entered a game and is processing the server's response, which may involve restoring a previous game state. */
+  RESUMING = 'RESUMING',
   /** The client is in a game and ready to send/receive game messages. */
   IN_GAME = 'IN_GAME',
   /** The client is waiting for the player to make a selection. */

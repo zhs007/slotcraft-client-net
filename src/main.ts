@@ -150,15 +150,15 @@ export class SlotcraftClient {
       }
       this.userInfo.gamecode = gamecodeToUse;
 
-      this.setState(ConnectionState.ENTERING_GAME);
-      const response = await this.send('comeingame3', {
+      // The client is now entering the game. The final state (IN_GAME, SPINEND, etc.)
+      // will be determined by the cmdret handler for 'comeingame3', which processes
+      // the server's response and handles any potential "resume" scenarios.
+      this.setState(ConnectionState.RESUMING);
+      return this.send('comeingame3', {
         gamecode: gamecodeToUse,
         tableid: '',
         isreconnect: false,
       });
-
-      this.setState(ConnectionState.IN_GAME);
-      return response;
     });
   }
 
@@ -347,7 +347,7 @@ export class SlotcraftClient {
     const allowedStates = [
       ConnectionState.LOGGING_IN,
       ConnectionState.LOGGED_IN,
-      ConnectionState.ENTERING_GAME,
+      ConnectionState.RESUMING, // <-- Replaces ENTERING_GAME for comeingame3
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
       ConnectionState.PLAYER_CHOICING,
@@ -580,7 +580,56 @@ export class SlotcraftClient {
               break;
             }
             case 'comeingame3': {
-              // enterGame() promise chain already moves to IN_GAME on success
+              // This is the crucial handler for the "resume" feature. After the server
+              // acknowledges 'comeingame3', the client might be in a fresh state or might
+              // need to resume a previously unfinished game. The logic here is nearly
+              // identical to the 'gamectrl3' handler, as both scenarios can result in a
+              // win state that needs collection or a state waiting for player input.
+
+              if (this.state !== ConnectionState.RESUMING) {
+                // This handler should only run when resuming. If we are in another
+                // state, something is wrong. Log a warning and do nothing.
+                this.logger.warn(
+                  `Received cmdret for 'comeingame3' in unexpected state: ${this.state}`
+                );
+                break;
+              }
+
+              const gmi = this.userInfo.lastGMI;
+              const totalwin = this.userInfo.lastTotalWin ?? 0;
+              const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+              // This condition determines if the game round has ended and requires a 'collect'
+              // action from the user. It's true if there's a win, or if there are multiple
+              // result stages (e.g., a feature that ends with no win).
+              const needsCollect =
+                (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+
+              // Check if the game is waiting for the player to make a choice.
+              if (gmi?.replyPlay?.finished === false) {
+                this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+              } else if (needsCollect) {
+                // If a collect is needed, transition to SPINEND.
+                this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+              } else {
+                // Otherwise, the game is in a standard playable state.
+                this.setState(ConnectionState.IN_GAME);
+              }
+
+              // Just like after a regular spin, if the resume state includes multiple
+              // results, we auto-collect the second-to-last one to streamline the UX.
+              if (
+                this.userInfo.lastResultsCount &&
+                this.userInfo.lastResultsCount > 1
+              ) {
+                const autoCollectIndex = this.userInfo.lastResultsCount - 2;
+                this.collect(autoCollectIndex).catch((err) => {
+                  this.logger.warn(
+                    `Auto-collect on resume for playIndex ${autoCollectIndex} failed:`,
+                    err
+                  );
+                });
+              }
               break;
             }
             case 'collect': {

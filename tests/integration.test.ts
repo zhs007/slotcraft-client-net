@@ -225,6 +225,115 @@ describe('SlotcraftClient Integration Tests', () => {
     });
   });
 
+  describe('Resume Flow', () => {
+    it('should resume into SPINEND state if there is a pending win', async () => {
+      client = getClient();
+      server.on('flblogin', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      // This is the key part: the server's response to comeingame includes
+      // a payload that looks like the result of a previous, unfinished spin.
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          gameid: 123,
+          totalwin: 50,
+          gmi: {
+            replyPlay: {
+              results: [{ coinWin: 50 }], // A pending result
+              finished: true,
+            },
+          },
+        });
+        server.send(ws, { msgid: 'gameuserinfo', ctrlid: 456 });
+        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+      });
+
+      const stateSpy = vi.fn();
+      client.on('state', stateSpy);
+
+      await client.connect(TEST_TOKEN);
+      await client.enterGame(TEST_GAME_CODE);
+
+      // The client should detect the pending win and move to SPINEND, not IN_GAME.
+      expect(client.getState()).toBe(ConnectionState.SPINEND);
+      const userInfo = client.getUserInfo();
+      expect(userInfo.lastTotalWin).toBe(50);
+
+      // Check the state transitions
+      const transitions = stateSpy.mock.calls.map((call) => call[0].current);
+      expect(transitions).toContain(ConnectionState.RESUMING);
+      expect(transitions[transitions.length - 1]).toBe(ConnectionState.SPINEND);
+    });
+
+    it('should resume into WAITTING_PLAYER state if there is a pending choice', async () => {
+      client = getClient();
+      server.on('flblogin', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          gameid: 123,
+          gmi: {
+            replyPlay: {
+              results: [],
+              nextCommands: ['bg-selectfg'],
+              nextCommandParams: ['lefty-bugsy-lefty'],
+              finished: false, // The key indicator for a player choice
+            },
+          },
+        });
+        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+      });
+
+      await client.connect(TEST_TOKEN);
+      await client.enterGame(TEST_GAME_CODE);
+
+      // The client should detect the pending choice and move to WAITTING_PLAYER.
+      expect(client.getState()).toBe(ConnectionState.WAITTING_PLAYER);
+      const userInfo = client.getUserInfo();
+      expect(userInfo.optionals).toBeDefined();
+      expect(userInfo.optionals?.length).toBe(1);
+      expect(userInfo.optionals?.[0].command).toBe('bg-selectfg');
+    });
+
+    it('should trigger auto-collect when resuming with multiple results', async () => {
+      client = getClient();
+      const collectHandler = vi.fn((msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
+      });
+      server.on('collect', collectHandler);
+      server.on('flblogin', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          gameid: 123,
+          totalwin: 100,
+          gmi: {
+            replyPlay: {
+              results: [{}, {}, {}], // 3 results
+              finished: true,
+            },
+          },
+        });
+        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+      });
+
+      await client.connect(TEST_TOKEN);
+      await client.enterGame(TEST_GAME_CODE);
+
+      // The final state should be SPINEND, as there's still one result to collect manually.
+      expect(client.getState()).toBe(ConnectionState.SPINEND);
+
+      // An auto-collect should have been triggered for the second-to-last result (index 1).
+      await vi.waitFor(() => expect(collectHandler).toHaveBeenCalledOnce());
+      expect(collectHandler.mock.calls[0][0].playIndex).toBe(1); // 3 - 2 = 1
+    });
+  });
+
   describe('Player Choice Flow', () => {
     it('should correctly follow the full player choice flow', async () => {
       // 1. Setup mock server handlers for the entire sequence
