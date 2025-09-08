@@ -184,6 +184,9 @@ const main = async () => {
         } else {
           throw new Error('In WAITTING_PLAYER state on resume, but no optionals found.');
         }
+      } else if (state === ConnectionState.RESUMING) {
+        // This is a transient state. We wait for the next state change.
+        await new Promise((resolve) => client.once('state', resolve));
       } else {
         // This case should ideally not be reached if the library's state machine is correct.
         throw new Error(`Unhandled resume state: ${state}. Cannot proceed.`);

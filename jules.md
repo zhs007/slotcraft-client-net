@@ -302,3 +302,14 @@
 - **产出**:
   - `jules/plan026.md`
   - `jules/plan026-report.md`
+
+### 2025-09-08: Refine RESUMING State Logic (Plan 027)
+
+- **目标**: 根据用户追加的反馈，重新引入 `RESUMING` 状态，并为其赋予更精确的、用于标记“游戏恢复”事件的语义。
+- **实施**:
+  - **恢复 RESUMING 状态**: 在 `ConnectionState` 枚举中重新加入了 `RESUMING` 状态，并更新了其注释，明确它是一个短暂的过渡状态。
+  - **调整状态转换**: 修改了 `enterGame` 的响应处理器。现在，当检测到需要恢复游戏时（例如有待处理的奖励或选择），客户端会先将状态设置为 `RESUMING`，然后再转换到如 `SPINEND` 等具体状态。这使得状态流`ENTERING_GAME` -> `RESUMING` -> `SPINEND` 更加清晰。
+  - **更新客户端代码**: 相应地更新了 `examples/example001.ts` 中的恢复逻辑和 `tests/integration.test.ts` 中的测试用例，以正确处理并验证这个新的状态转换序列。
+- **产出**:
+  - `jules/plan027.md`
+  - `jules/plan027-report.md`

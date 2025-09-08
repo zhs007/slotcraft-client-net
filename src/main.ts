@@ -368,6 +368,7 @@ export class SlotcraftClient {
       ConnectionState.LOGGING_IN,
       ConnectionState.LOGGED_IN,
       ConnectionState.ENTERING_GAME,
+      ConnectionState.RESUMING,
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
       ConnectionState.PLAYER_CHOICING,
@@ -634,8 +635,16 @@ export class SlotcraftClient {
               const needsCollect =
                 (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
 
-              // Check if the game is waiting for the player to make a choice.
-              if (gmi?.replyPlay?.finished === false) {
+              const isPlayerChoice = gmi?.replyPlay?.finished === false;
+
+              // If the game state is unfinished, it's a resume scenario.
+              // Set the transient RESUMING state to clearly signal this event.
+              if (isPlayerChoice || needsCollect) {
+                this.setState(ConnectionState.RESUMING);
+              }
+
+              // Now, transition to the specific state required.
+              if (isPlayerChoice) {
                 this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
               } else if (needsCollect) {
                 // If a collect is needed, transition to SPINEND.

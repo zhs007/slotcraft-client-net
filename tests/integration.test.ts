@@ -295,11 +295,16 @@ describe('SlotcraftClient Integration Tests', () => {
       // Check the state transitions
       const transitions = stateSpy.mock.calls.map((call) => call[0].current);
       expect(transitions).toContain(ConnectionState.ENTERING_GAME);
+      // It should now also briefly transition through RESUMING
+      expect(transitions).toContain(ConnectionState.RESUMING);
       expect(transitions[transitions.length - 1]).toBe(ConnectionState.SPINEND);
     });
 
     it('should resume into WAITTING_PLAYER state if there is a pending choice', async () => {
       client = getClient();
+      const stateSpy = vi.fn();
+      client.on('state', stateSpy);
+
       server.on('flblogin', (msg, ws) => {
         server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
       });
@@ -330,6 +335,12 @@ describe('SlotcraftClient Integration Tests', () => {
       expect(userInfo.optionals).toBeDefined();
       expect(userInfo.optionals?.length).toBe(1);
       expect(userInfo.optionals?.[0].command).toBe('bg-selectfg');
+
+      // Check the state transitions
+      const transitions = stateSpy.mock.calls.map((call) => call[0].current);
+      expect(transitions).toContain(ConnectionState.ENTERING_GAME);
+      expect(transitions).toContain(ConnectionState.RESUMING);
+      expect(transitions[transitions.length - 1]).toBe(ConnectionState.WAITTING_PLAYER);
     });
 
     it('should trigger auto-collect when resuming with multiple results', async () => {
