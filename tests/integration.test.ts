@@ -139,7 +139,15 @@ describe('SlotcraftClient Integration Tests', () => {
   describe('Collect Flow', () => {
     beforeEach(async () => {
       await connectAndEnterGame();
-      // Set up a spin that results in a win
+    });
+
+    it('should auto-collect after a multi-stage win, then allow manual collect', async () => {
+      const collectHandler = vi.fn((msg, ws) =>
+        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true })
+      );
+      server.on('collect', collectHandler);
+
+      // Spin results in a win with 2 results, triggering auto-collect for index 0
       server.on('gamectrl3', (msg, ws) => {
         server.send(ws, {
           msgid: 'gamemoduleinfo',
@@ -148,25 +156,45 @@ describe('SlotcraftClient Integration Tests', () => {
         });
         server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
       });
-      await client.spin({ bet: 1, lines: 25 });
-      expect(client.getState()).toBe(ConnectionState.SPINEND);
-    });
 
-    it('should send multiple collect commands if resultsCount > 1', async () => {
-      const collectHandler = vi.fn((msg, ws) =>
-        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true })
-      );
-      server.on('collect', collectHandler);
+      await client.spin({ bet: 1, lines: 25 });
+
+      // Wait for auto-collect (index 0) to happen
+      await vi.waitFor(() => expect(collectHandler).toHaveBeenCalledTimes(1));
+      expect(collectHandler.mock.calls[0][0].playIndex).toBe(0); // 2 - 2 = 0
+
+      // State should be back in-game after auto-collect
+      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.IN_GAME));
+
+      // Now manually collect the last result (index 1)
       await client.collect();
       expect(collectHandler).toHaveBeenCalledTimes(2);
-      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+      expect(collectHandler.mock.calls[1][0].playIndex).toBe(1); // 2 - 1 = 1
     });
 
-    it('should reject if collect command fails and stay in SPINEND state', async () => {
+    it('should reject if manual collect fails and revert to SPINEND state', async () => {
+      // This time, spin results in a win with only 1 result, so auto-collect is NOT triggered.
+      server.on('gamectrl3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          totalwin: 10,
+          gmi: { replyPlay: { results: [{}] } }, // 1 result
+        });
+        server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+      });
+
+      await client.spin({ bet: 1, lines: 25 });
+      // With no auto-collect, state should be SPINEND.
+      expect(client.getState()).toBe(ConnectionState.SPINEND);
+
+      // Set up the server to fail the collect command
       server.on('collect', (msg, ws) =>
         server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: false })
       );
+
+      // The manual collect should be rejected
       await expect(client.collect()).rejects.toThrow();
+      // On failure, the state should revert to SPINEND to allow a retry.
       expect(client.getState()).toBe(ConnectionState.SPINEND);
     });
   });

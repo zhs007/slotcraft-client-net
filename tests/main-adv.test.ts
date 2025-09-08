@@ -107,12 +107,18 @@ describe('SlotcraftClient Advanced Tests', () => {
     jsonParseSpy.mockRestore();
   });
 
-  it('should correctly collect multi-stage results (e.g., resultsCount=3)', async () => {
+  it('should auto-collect intermediate results and allow manual collect for the final one', async () => {
     await connectAndEnterGame();
+
+    const collectHandler = vi.fn((msg, ws) => {
+      server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true, req: msg });
+    });
+    server.on('collect', collectHandler);
 
     server.on('gamectrl3', (msg, ws) => {
       server.send(ws, {
         msgid: 'gamemoduleinfo',
+        // With 3 results, auto-collect should trigger for index 1.
         gmi: { replyPlay: { results: [{}, {}, {}] } },
         totalwin: 10,
       });
@@ -120,18 +126,28 @@ describe('SlotcraftClient Advanced Tests', () => {
     });
 
     await client.spin({ bet: 1, lines: 1 });
-    await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.SPINEND));
 
-    const collectHandler = vi.fn((msg, ws) => {
-      server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
+    // Wait for the auto-collect to be triggered and processed.
+    await vi.waitFor(() => {
+      expect(collectHandler).toHaveBeenCalledTimes(1);
     });
-    server.on('collect', collectHandler);
 
+    // Verify the auto-collect call had the correct index (3 - 2 = 1).
+    expect(collectHandler.mock.calls[0][0].playIndex).toBe(1);
+
+    // After auto-collect, the state should return to IN_GAME.
+    // The sequence is: SPINNING -> SPINEND -> COLLECTING -> IN_GAME
+    await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.IN_GAME));
+
+    // Now, the user manually collects the final result.
+    // Note: The state is IN_GAME, but a manual collect is still allowed.
+    // Omitting playIndex defaults to lastResultsCount - 1.
     await client.collect();
 
-    // The logic is to collect resultsCount-1 and resultsCount
+    // A second call to the handler should have occurred.
     expect(collectHandler).toHaveBeenCalledTimes(2);
-    expect(collectHandler.mock.calls[0][0].playIndex).toBe(2);
-    expect(collectHandler.mock.calls[1][0].playIndex).toBe(3);
+
+    // Verify the manual collect call had the correct index (3 - 1 = 2).
+    expect(collectHandler.mock.calls[1][0].playIndex).toBe(2);
   });
 });

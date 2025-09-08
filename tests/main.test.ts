@@ -269,7 +269,9 @@ describe('SlotcraftClient (Real Timers)', () => {
       (client as any).userInfo.lastPlayIndex = undefined;
       (client as any).userInfo.lastResultsCount = undefined;
 
-      await expect(client.collect()).rejects.toThrow('playIndex not available');
+      await expect(client.collect()).rejects.toThrow(
+        'playIndex is not available and could not be derived.'
+      );
     });
 
     it('should correctly parse gamecfg and derive linesOptions', async () => {

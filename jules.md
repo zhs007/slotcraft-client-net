@@ -180,3 +180,22 @@
 - **产出**:
   - `jules/plan016.md`
   - `jules/plan016-report.md`
+
+### 2025-09-07: Refactor Collect Logic and Implement Auto-Collect (Plan 017)
+
+- **目标**: 根据用户反馈，重构 `collect` 接口，简化其逻辑，并实现一个“自动收集”（auto-collect）机制以优化网络交互。
+- **实施**:
+  - **`collect` 方法重构**:
+    - 移除了内部复杂的 `deriveSequence` 逻辑，该方法现在只发送单个 `collect` 请求。
+    - 简化了 `playIndex` 的确定方式：优先使用调用者传入的 `playIndex`；若未传入，则默认为 `lastResultsCount - 1`，即收集最新的一个结果。
+    - 为该方法补充了详尽的 JSDoc 注释，阐明了其功能和参数行为。
+  - **实现 Auto-Collect**:
+    - 在 `spin` 和 `selectOptional` 的 `cmdret` 处理器中增加了新逻辑。
+    - 当一次操作返回多个结果时（`lastResultsCount > 1`），客户端会自动调用 `collect(lastResultsCount - 2)`。
+    - 此操作会将倒数第二个结果确认为“已读”，只留下最后一个结果待玩家手动收集，从而减少了不必要的网络通信。
+    - 自动收集调用被设计为非阻塞的，其错误会被捕获并记录，不会影响主游戏流程。
+  - **测试修复**:
+    - 由于 `collect` 的行为发生根本性改变，重写了所有相关的单元测试和集成测试，以验证新的简化逻辑和自动收集流程。
+- **产出**:
+  - `jules/plan017.md`
+  - `jules/plan017-report.md`

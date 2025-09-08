@@ -196,49 +196,62 @@ export class SlotcraftClient {
   }
 
   /**
-   * Collect winnings for the last play.
-   * If playIndex is omitted, uses cached userInfo.lastPlayIndex.
+   * Sends a `collect` command to the server to acknowledge a game result.
+   * This is typically required when a spin results in a win (`totalwin > 0`) and the client
+   * needs to confirm that the player has seen the result.
+   *
+   * The `playIndex` corresponds to an index in the `replyPlay.results` array from the
+   * `gamemoduleinfo` message.
+   *
+   * @param playIndex - The specific, 0-based index of the result to collect.
+   *   - If provided, this value will be used directly. This is useful for the auto-collect feature.
+   *   - If omitted, the client defaults to collecting the very last result, calculated as
+   *     `lastResultsCount - 1`. This is the standard behavior for manual collection by the player.
+   *   - As a fallback if `lastResultsCount` is not available, it will use the most
+   *     recently cached `lastPlayIndex` from the server.
    */
   public collect(playIndex?: number): Promise<any> {
-    // Collect should be called after a spin ends; allow in SPINEND, or IN_GAME when game explicitly does a collect
+    // Collect can be called after a spin ends (SPINEND) or at any time while in the game
+    // for special cases like acknowledging an auto-collected reward.
     if (this.state !== ConnectionState.SPINEND && this.state !== ConnectionState.IN_GAME) {
       return Promise.reject(new Error(`Cannot collect in state: ${this.state}`));
     }
-    const { gameid } = this.userInfo;
-    const resultsCount = this.userInfo.lastResultsCount;
-    const idx = playIndex ?? this.userInfo.lastPlayIndex;
-    if (!gameid) return Promise.reject(new Error('gameid not available'));
-    // When caller does not provide playIndex, derive sequence from resultsCount if available
-    const deriveSequence = (): number[] | undefined => {
-      if (typeof playIndex === 'number') return [playIndex];
-      // Per protocol, when a spin results in multiple stages (resultsCount > 1),
-      // they must be collected sequentially. This logic handles collecting the
-      // final two stages for multi-stage wins, or the single stage for simple wins.
-      // The protocol requires this specific sequence for collection.
-      if (typeof resultsCount === 'number') {
-        if (resultsCount > 1) return [resultsCount - 1, resultsCount];
-        if (resultsCount === 1) return [1];
-      }
-      if (typeof idx === 'number') return [idx];
-      return undefined;
-    };
-    const seq = deriveSequence();
-    if (!seq || seq.length === 0) return Promise.reject(new Error('playIndex not available'));
+    const { gameid, lastResultsCount, lastPlayIndex } = this.userInfo;
+    if (!gameid) {
+      return Promise.reject(new Error('gameid not available'));
+    }
+
+    let indexToCollect: number | undefined;
+
+    if (typeof playIndex === 'number') {
+      // Use the index explicitly provided by the caller (e.g., for auto-collect).
+      indexToCollect = playIndex;
+    } else if (typeof lastResultsCount === 'number' && lastResultsCount > 0) {
+      // If no index is provided, default to collecting the final result.
+      // The playIndex is 0-based, so it's `length - 1`.
+      indexToCollect = lastResultsCount - 1;
+    } else if (typeof lastPlayIndex === 'number') {
+      // As a fallback, use the last known playIndex from server messages.
+      indexToCollect = lastPlayIndex;
+    }
+
+    if (typeof indexToCollect !== 'number') {
+      return Promise.reject(
+        new Error('playIndex is not available and could not be derived.')
+      );
+    }
 
     this.setState(ConnectionState.COLLECTING);
-    // Chain collects sequentially
-    let p: Promise<any> = Promise.resolve();
-    for (const i of seq) {
-      p = p.then(() => this.send('collect', { gameid, playIndex: i }));
-    }
-    return p
+
+    return this.send('collect', { gameid, playIndex: indexToCollect })
       .then((res) => {
-        // Only on success transition back to IN_GAME
+        // On successful collection, always return to the main IN_GAME state.
         this.setState(ConnectionState.IN_GAME);
         return res;
       })
       .catch((err) => {
-        // Stay around SPINEND for retry on failure
+        // If collection fails, revert to the SPINEND state to allow for a retry.
+        // This is important for ensuring wins are properly acknowledged.
         this.setState(ConnectionState.SPINEND);
         throw err;
       });
@@ -445,6 +458,26 @@ export class SlotcraftClient {
                 } else {
                   this.setState(ConnectionState.IN_GAME);
                 }
+              }
+
+              // Auto-collect feature: If a spin or select results in multiple stages,
+              // automatically collect the second-to-last one. This confirms to the server
+              // that the user has "seen" the intermediate results, reducing the number of
+              // required manual `collect` calls and improving protocol efficiency.
+              // The last result is left uncollected for the user to manually trigger.
+              if (
+                this.userInfo.lastResultsCount &&
+                this.userInfo.lastResultsCount > 1
+              ) {
+                const autoCollectIndex = this.userInfo.lastResultsCount - 2;
+                this.collect(autoCollectIndex).catch((err) => {
+                  // Log the error but do not throw, as auto-collect is a background
+                  // optimization and should not disrupt the main game flow.
+                  this.logger.warn(
+                    `Auto-collect for playIndex ${autoCollectIndex} failed:`,
+                    err
+                  );
+                });
               }
               break;
             }
