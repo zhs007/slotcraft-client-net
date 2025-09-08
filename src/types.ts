@@ -168,6 +168,8 @@ export interface UserInfo {
   // Player choice context
   optionals?: Optional[];
   curSpinParams?: SpinParams;
+  // Scene data, simplified into a 2D array
+  defaultScene?: number[][];
 }
 
 /**

@@ -1,3 +1,4 @@
+import { transformSceneData } from './utils';
 import { Connection } from './connection';
 import { EventEmitter } from './event-emitter';
 import {
@@ -767,6 +768,11 @@ export class SlotcraftClient {
               };
             }
           }
+        }
+
+        // Cache the default scene if it exists, transforming it into a 2D array.
+        if (g.defaultScene) {
+          this.userInfo.defaultScene = transformSceneData(g.defaultScene);
         }
         break;
       }
