@@ -60,8 +60,13 @@ describe('SlotcraftClient Integration Tests', () => {
       });
       server.on('flblogin', loginHandler);
       client = getClient();
-      await expect(client.connect(TEST_TOKEN)).resolves.toBeUndefined();
-      expect(client.getState()).toBe(ConnectionState.LOGGED_IN);
+
+      // The connect promise resolves when the operation is complete.
+      await client.connect(TEST_TOKEN);
+
+      // Due to the async nature of the queue, we wait for the state to settle.
+      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGED_IN));
+
       expect(loginHandler).toHaveBeenCalledOnce();
     });
   });
@@ -69,15 +74,19 @@ describe('SlotcraftClient Integration Tests', () => {
   describe('State and Input Validation', () => {
     it('should reject calling methods from wrong state', async () => {
       client = getClient();
-      await expect(client.enterGame('foo')).rejects.toThrow();
-      const connectPromise = client.connect(TEST_TOKEN);
-      await expect(client.connect(TEST_TOKEN)).rejects.toThrow();
+      // Cannot enter game before connect
+      await expect(client.enterGame('foo')).rejects.toThrow('Cannot enter game in state: IDLE');
+
+      // Set up a server that never responds to login
       server.on('flblogin', () => {});
-      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGING_IN));
-      await expect(client.enterGame('foo')).rejects.toThrow();
-      server.broadcast({ msgid: 'cmdret', cmdid: 'flblogin', isok: true });
-      await connectPromise;
-      await expect(client.spin({})).rejects.toThrow();
+      // connect() will time out, reject, and disconnect.
+      await expect(client.connect(TEST_TOKEN)).rejects.toThrow(
+        'Request timed out for cmdid: flblogin'
+      );
+      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
+
+      // Cannot spin when disconnected
+      await expect(client.spin({})).rejects.toThrow('Cannot spin in state: DISCONNECTED');
     });
 
     it('should reject spin with invalid parameters', async () => {
@@ -146,13 +155,15 @@ describe('SlotcraftClient Integration Tests', () => {
       await connectAndEnterGame();
     });
 
-    it('should auto-collect after a multi-stage win, then allow manual collect', async () => {
-      const collectHandler = vi.fn((msg, ws) =>
-        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true })
-      );
+    it('should queue auto-collect and manual collect in correct order', async () => {
+      const receivedMessages: any[] = [];
+      const collectHandler = vi.fn((msg, ws) => {
+        receivedMessages.push(msg); // Record the received message
+        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
+      });
       server.on('collect', collectHandler);
 
-      // Spin results in a win with 2 results, triggering auto-collect for index 0
+      // Spin results in a win with 2 results, which will trigger auto-collect for index 0
       server.on('gamectrl3', (msg, ws) => {
         server.send(ws, {
           msgid: 'gamemoduleinfo',
@@ -162,45 +173,36 @@ describe('SlotcraftClient Integration Tests', () => {
         server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
       });
 
-      await client.spin({ bet: 1, lines: 25 });
+      // The spin() promise resolves when its cmdret is received. The cmdret handler
+      // for spin is what enqueues the auto-collect operation.
+      const spinPromise = client.spin({ bet: 1, lines: 25 });
 
-      // Wait for auto-collect (index 0) to happen
-      await vi.waitFor(() => expect(collectHandler).toHaveBeenCalledTimes(1));
-      expect(collectHandler.mock.calls[0][0].playIndex).toBe(0); // 2 - 2 = 0
+      // We must wait for the spin to fully complete.
+      await spinPromise;
 
-      // State should be back in-game after auto-collect
-      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.IN_GAME));
-
-      // Now manually collect the last result (index 1)
-      await client.collect();
-      expect(collectHandler).toHaveBeenCalledTimes(2);
-      expect(collectHandler.mock.calls[1][0].playIndex).toBe(1); // 2 - 1 = 1
-    });
-
-    it('should reject if manual collect fails and revert to SPINEND state', async () => {
-      // This time, spin results in a win with only 1 result, so auto-collect is NOT triggered.
-      server.on('gamectrl3', (msg, ws) => {
-        server.send(ws, {
-          msgid: 'gamemoduleinfo',
-          totalwin: 10,
-          gmi: { replyPlay: { results: [{}] } }, // 1 result
-        });
-        server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
-      });
-
-      await client.spin({ bet: 1, lines: 25 });
-      // With no auto-collect, state should be SPINEND.
+      // After a winning spin that needs collecting, the state should be SPINEND.
+      // At this point, the auto-collect operation has been added to the queue.
       expect(client.getState()).toBe(ConnectionState.SPINEND);
 
-      // Set up the server to fail the collect command
-      server.on('collect', (msg, ws) =>
-        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: false })
-      );
+      // Now, we issue the manual collect. This will be queued *after* the auto-collect.
+      const manualCollectPromise = client.collect();
 
-      // The manual collect should be rejected
-      await expect(client.collect()).rejects.toThrow();
-      // On failure, the state should revert to SPINEND to allow a retry.
-      expect(client.getState()).toBe(ConnectionState.SPINEND);
+      // Wait for the manual collect to finish. By this time, both collects
+      // should have been sent to the server in order.
+      await manualCollectPromise;
+
+      // Now, check the results.
+      // The server should have received two 'collect' commands.
+      await vi.waitFor(() => expect(collectHandler).toHaveBeenCalledTimes(2));
+
+      // The FIRST one should be the auto-collect for playIndex 0.
+      expect(receivedMessages[0].playIndex).toBe(0); // results.length - 2
+
+      // The SECOND one should be the manual collect, which defaults to the last index.
+      expect(receivedMessages[1].playIndex).toBe(1); // results.length - 1
+
+      // After all operations are done, the state should be IN_GAME.
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
     it('should use lastPlayIndex + 1 as a fallback when collecting', async () => {

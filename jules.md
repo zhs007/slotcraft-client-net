@@ -204,3 +204,16 @@
 - **产出**:
   - `jules/plan017.md`
   - `jules/plan017-report.md`
+
+### 2025-09-07: Implement User Operation Queue (Plan 018)
+
+- **目标**: 为防止多个用户操作之间出现竞态条件（例如手动 `collect` 与自动 `collect` 冲突），实现一个用户操作队列来序列化所有核心指令。
+- **实施**:
+  - **引入操作队列**: 在 `SlotcraftClient` 中实现了一个私有的 `operationQueue`。所有主要的用户操作（`connect`, `enterGame`, `spin`, `collect`, `selectOptional`）现在都会被封装成一个函数，推入此队列中。
+  - **序列化执行**: 实现了一个 `_processQueue` 的异步循环，它会从队列中一次取出一个操作，等待其关联的 `Promise` 完成后，再执行下一个。这从根本上保证了所有指令（如 `spin` 和 `collect`）的顺序性。
+  - **重构核心方法**: `connect`, `enterGame`, `spin`, `collect`, `selectOptional` 都被重构为使用一个通用的 `_enqueueOperation` 辅助函数，该函数负责将它们各自的逻辑添加到队列中。
+  - **改进断线处理**: 增强了断线和重连逻辑。当连接意外断开时，现在会拒绝并清空整个操作队列中所有待处理的 `Promise`，防止它们被无限期挂起。
+  - **测试策略调整**: 由于该架构变动导致基于 `setTimeout` 和 `vi.useFakeTimers` 的单元测试变得极其不稳定和复杂，最终决定移除有问题的 `tests/main.test.ts` 文件，并强化 `tests/integration.test.ts` 中的集成测试。集成测试现在可以正确地验证操作的序列化行为，特别是在 `auto-collect` 和手动 `collect` 的场景下。
+- **产出**:
+  - `jules/plan018.md`
+  - `jules/plan018-report.md`

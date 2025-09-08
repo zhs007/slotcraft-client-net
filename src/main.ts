@@ -28,7 +28,27 @@ export class SlotcraftClient {
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userInfo: UserInfo = {};
-  private loginPromise: { resolve: () => void; reject: (reason?: any) => void } | null = null;
+  // No longer needed, as the enqueued operation's promise is returned directly.
+  // private loginPromise: { resolve: () => void; reject: (reason?: any) => void } | null = null;
+
+  // --- User Operation Queue ---
+  /**
+   * @private
+   * A queue of functions that execute user operations.
+   * Each function in the queue is a "thunk" that returns a Promise.
+   * This ensures that all major operations (login, spin, collect, etc.)
+   * are executed serially, preventing race conditions.
+   */
+  private operationQueue: Array<{
+    executor: () => Promise<any>;
+    reject: (reason?: any) => void;
+  }> = [];
+  /**
+   * @private
+   * A flag to prevent the queue from being processed by multiple concurrent triggers.
+   * This acts as a lock.
+   */
+  private isProcessingQueue = false;
 
   constructor(options: SlotcraftClientOptions) {
     this.options = {
@@ -79,61 +99,64 @@ export class SlotcraftClient {
   }
 
   public connect(token?: string): Promise<void> {
-    if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
-      return Promise.reject(new Error(`Cannot connect in state: ${this.state}`));
-    }
+    return this._enqueueOperation(async () => {
+      if (this.state !== ConnectionState.IDLE && this.state !== ConnectionState.DISCONNECTED) {
+        throw new Error(`Cannot connect in state: ${this.state}`);
+      }
 
-    // Use token from argument if provided, otherwise fall back to the one from constructor options.
-    const tokenToUse = token || this.userInfo.token;
-    if (!tokenToUse) {
-      return Promise.reject(
-        new Error('Token must be provided either in the constructor or to connect()')
-      );
-    }
-    // Cache token for auto-reconnects and the subsequent login call.
-    this.userInfo.token = tokenToUse;
+      const tokenToUse = token || this.userInfo.token;
+      if (!tokenToUse) {
+        throw new Error('Token must be provided either in the constructor or to connect()');
+      }
+      this.userInfo.token = tokenToUse;
 
-    this.setState(ConnectionState.CONNECTING);
+      this.setState(ConnectionState.CONNECTING);
 
-    // This promise will be resolved or rejected by the private _login method.
-    return new Promise<void>((resolve, reject) => {
-      this.loginPromise = { resolve, reject };
+      // This promise wraps the entire connection and login flow.
+      await new Promise<void>((resolve, reject) => {
+        // If a disconnect happens before we are connected, reject the promise.
+        const onDisconnect = (payload: DisconnectEventPayload) => {
+          this.emitter.off('connect', onConnect); // Clean up the success listener
+          reject(new Error(payload.reason));
+        };
 
-      // If a disconnection happens before the login promise is settled, reject it.
-      const onDisconnect = (payload: DisconnectEventPayload) => {
-        if (this.loginPromise) {
-          this.loginPromise.reject(new Error(payload.reason));
-          this.loginPromise = null;
-        }
-      };
-      // We only care about this for the initial connection flow.
-      this.emitter.once('disconnect', onDisconnect);
+        const onConnect = () => {
+          this.emitter.off('disconnect', onDisconnect); // Clean up the failure listener
+          resolve();
+        };
 
-      this.connection.connect();
+        this.emitter.once('connect', onConnect);
+        this.emitter.once('disconnect', onDisconnect);
+
+        this.connection.connect();
+      });
+
+      // Once connected, proceed to login. The `_login` method is now also an
+      // internally queued operation, but since `connect` is the first one,
+      // it will execute immediately after the connection is established.
+      await this._login();
     });
   }
 
   public enterGame(gamecode?: string): Promise<any> {
-    if (this.state !== ConnectionState.LOGGED_IN) {
-      return Promise.reject(new Error(`Cannot enter game in state: ${this.state}`));
-    }
+    return this._enqueueOperation(async () => {
+      if (this.state !== ConnectionState.LOGGED_IN) {
+        throw new Error(`Cannot enter game in state: ${this.state}`);
+      }
 
-    // Use gamecode from argument if provided, otherwise fall back to the one from constructor options.
-    const gamecodeToUse = gamecode || this.userInfo.gamecode;
-    if (!gamecodeToUse) {
-      return Promise.reject(
-        new Error('Game code must be provided either in the constructor or to enterGame()')
-      );
-    }
-    // Cache gamecode for context
-    this.userInfo.gamecode = gamecodeToUse;
+      const gamecodeToUse = gamecode || this.userInfo.gamecode;
+      if (!gamecodeToUse) {
+        throw new Error('Game code must be provided either in the constructor or to enterGame()');
+      }
+      this.userInfo.gamecode = gamecodeToUse;
 
-    this.setState(ConnectionState.ENTERING_GAME);
-    return this.send('comeingame3', {
-      gamecode: gamecodeToUse,
-      tableid: '',
-      isreconnect: false,
-    }).then((response) => {
+      this.setState(ConnectionState.ENTERING_GAME);
+      const response = await this.send('comeingame3', {
+        gamecode: gamecodeToUse,
+        tableid: '',
+        isreconnect: false,
+      });
+
       this.setState(ConnectionState.IN_GAME);
       return response;
     });
@@ -144,48 +167,49 @@ export class SlotcraftClient {
    * Updates ctrlid will be received via gameuserinfo and cached automatically.
    */
   public spin(params: SpinParams): Promise<any> {
-    if (this.state !== ConnectionState.IN_GAME) {
-      return Promise.reject(new Error(`Cannot spin in state: ${this.state}`));
-    }
-    const { gameid, ctrlid } = this.userInfo;
-    if (!gameid) {
-      return Promise.reject(new Error('gameid not available'));
-    }
-    if (!ctrlid) {
-      return Promise.reject(new Error('ctrlid not available'));
-    }
+    return this._enqueueOperation(async () => {
+      if (this.state !== ConnectionState.IN_GAME) {
+        throw new Error(`Cannot spin in state: ${this.state}`);
+      }
+      const { gameid, ctrlid } = this.userInfo;
+      if (!gameid) {
+        throw new Error('gameid not available');
+      }
+      if (!ctrlid) {
+        throw new Error('ctrlid not available');
+      }
 
-    let { bet, lines, times = 1, autonums = -1, ctrlname = 'spin', ...rest } = params;
-    // Default bet from cached game config if not provided
-    if (bet == null) {
-      if (typeof this.userInfo.defaultLinebet === 'number') {
-        bet = this.userInfo.defaultLinebet;
+      let { bet, lines, times = 1, autonums = -1, ctrlname = 'spin', ...rest } = params;
+      // Default bet from cached game config if not provided
+      if (bet == null) {
+        if (typeof this.userInfo.defaultLinebet === 'number') {
+          bet = this.userInfo.defaultLinebet;
+        }
       }
-    }
-    // Validate bet against allowed linebets when available
-    if (typeof bet === 'number' && Array.isArray(this.userInfo.linebets)) {
-      if (!this.userInfo.linebets.includes(bet)) {
-        return Promise.reject(
-          new Error(`Invalid bet ${bet}. Allowed: [${this.userInfo.linebets.join(',')}]`)
-        );
+      // Validate bet against allowed linebets when available
+      if (typeof bet === 'number' && Array.isArray(this.userInfo.linebets)) {
+        if (!this.userInfo.linebets.includes(bet)) {
+          throw new Error(`Invalid bet ${bet}. Allowed: [${this.userInfo.linebets.join(',')}]`);
+        }
       }
-    }
-    if (bet == null) {
-      return Promise.reject(new Error('bet is required and no default is available'));
-    }
-    // Default lines to smallest allowed if not provided and we have options
-    if (lines == null) {
-      const opts = this.userInfo.linesOptions;
-      if (Array.isArray(opts) && opts.length > 0) {
-        lines = Math.min(...opts);
+      if (bet == null) {
+        throw new Error('bet is required and no default is available');
       }
-    }
-    const ctrlparam = { autonums, bet, lines, times, ...rest };
-    // Cache the spin params for potential player choice follow-up
-    this.userInfo.curSpinParams = { bet, lines, times };
-    this.userInfo.optionals = [];
-    this.setState(ConnectionState.SPINNING);
-    return this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam }).then(() => {
+      // Default lines to smallest allowed if not provided and we have options
+      if (lines == null) {
+        const opts = this.userInfo.linesOptions;
+        if (Array.isArray(opts) && opts.length > 0) {
+          lines = Math.min(...opts);
+        }
+      }
+      const ctrlparam = { autonums, bet, lines, times, ...rest };
+      // Cache the spin params for potential player choice follow-up
+      this.userInfo.curSpinParams = { bet, lines, times };
+      this.userInfo.optionals = [];
+      this.setState(ConnectionState.SPINNING);
+
+      await this.send('gamectrl3', { gameid, ctrlid, ctrlname, ctrlparam });
+
       // By protocol, gamemoduleinfo should have arrived before cmdret.
       // Return the latest cached GMI snapshot and simple aggregates.
       const gmi = this.userInfo.lastGMI;
@@ -211,82 +235,83 @@ export class SlotcraftClient {
    *     recently cached `lastPlayIndex` from the server.
    */
   public collect(playIndex?: number): Promise<any> {
-    // Collect can be called after a spin ends (SPINEND) or at any time while in the game
-    // for special cases like acknowledging an auto-collected reward.
-    if (this.state !== ConnectionState.SPINEND && this.state !== ConnectionState.IN_GAME) {
-      return Promise.reject(new Error(`Cannot collect in state: ${this.state}`));
-    }
-    const { gameid, lastResultsCount, lastPlayIndex } = this.userInfo;
-    if (!gameid) {
-      return Promise.reject(new Error('gameid not available'));
-    }
+    return this._enqueueOperation(async () => {
+      // Collect can be called after a spin ends (SPINEND) or at any time while in the game
+      // for special cases like acknowledging an auto-collected reward.
+      if (this.state !== ConnectionState.SPINEND && this.state !== ConnectionState.IN_GAME) {
+        throw new Error(`Cannot collect in state: ${this.state}`);
+      }
+      const { gameid, lastResultsCount, lastPlayIndex } = this.userInfo;
+      if (!gameid) {
+        throw new Error('gameid not available');
+      }
 
-    let indexToCollect: number | undefined;
+      let indexToCollect: number | undefined;
 
-    if (typeof playIndex === 'number') {
-      // Use the index explicitly provided by the caller (e.g., for auto-collect).
-      indexToCollect = playIndex;
-    } else if (typeof lastResultsCount === 'number' && lastResultsCount > 0) {
-      // If no index is provided, default to collecting the final result.
-      // The playIndex is 0-based, so it's `length - 1`.
-      indexToCollect = lastResultsCount - 1;
-    } else if (typeof lastPlayIndex === 'number') {
-      // As a fallback, use the last known playIndex from server messages and
-      // increment it to collect the next sequential result.
-      indexToCollect = lastPlayIndex + 1;
-    }
+      if (typeof playIndex === 'number') {
+        // Use the index explicitly provided by the caller (e.g., for auto-collect).
+        indexToCollect = playIndex;
+      } else if (typeof lastResultsCount === 'number' && lastResultsCount > 0) {
+        // If no index is provided, default to collecting the final result.
+        // The playIndex is 0-based, so it's `length - 1`.
+        indexToCollect = lastResultsCount - 1;
+      } else if (typeof lastPlayIndex === 'number') {
+        // As a fallback, use the last known playIndex from server messages and
+        // increment it to collect the next sequential result.
+        indexToCollect = lastPlayIndex + 1;
+      }
 
-    if (typeof indexToCollect !== 'number') {
-      return Promise.reject(
-        new Error('playIndex is not available and could not be derived.')
-      );
-    }
+      if (typeof indexToCollect !== 'number') {
+        throw new Error('playIndex is not available and could not be derived.');
+      }
 
-    this.setState(ConnectionState.COLLECTING);
+      this.setState(ConnectionState.COLLECTING);
 
-    return this.send('collect', { gameid, playIndex: indexToCollect })
-      .then((res) => {
+      try {
+        const res = await this.send('collect', { gameid, playIndex: indexToCollect });
         // On successful collection, always return to the main IN_GAME state.
         this.setState(ConnectionState.IN_GAME);
         return res;
-      })
-      .catch((err) => {
+      } catch (err) {
         // If collection fails, revert to the SPINEND state to allow for a retry.
         // This is important for ensuring wins are properly acknowledged.
         this.setState(ConnectionState.SPINEND);
         throw err;
-      });
+      }
+    });
   }
 
   public selectOptional(index: number): Promise<any> {
-    if (this.state !== ConnectionState.WAITTING_PLAYER) {
-      return Promise.reject(new Error(`Cannot selectOptional in state: ${this.state}`));
-    }
-    const { gameid, ctrlid, optionals, curSpinParams } = this.userInfo;
-    if (!gameid) return Promise.reject(new Error('gameid not available'));
-    if (!ctrlid) return Promise.reject(new Error('ctrlid not available'));
-    if (!optionals || !optionals[index]) {
-      return Promise.reject(new Error(`Invalid selection index: ${index}`));
-    }
-    if (!curSpinParams) {
-      return Promise.reject(new Error('Missing spin parameters for selection'));
-    }
+    return this._enqueueOperation(async () => {
+      if (this.state !== ConnectionState.WAITTING_PLAYER) {
+        throw new Error(`Cannot selectOptional in state: ${this.state}`);
+      }
+      const { gameid, ctrlid, optionals, curSpinParams } = this.userInfo;
+      if (!gameid) throw new Error('gameid not available');
+      if (!ctrlid) throw new Error('ctrlid not available');
+      if (!optionals || !optionals[index]) {
+        throw new Error(`Invalid selection index: ${index}`);
+      }
+      if (!curSpinParams) {
+        throw new Error('Missing spin parameters for selection');
+      }
 
-    const selection = optionals[index];
-    const ctrlparam = {
-      ...curSpinParams, // includes bet, lines, times
-      command: selection.command,
-      commandParam: selection.param,
-    };
+      const selection = optionals[index];
+      const ctrlparam = {
+        ...curSpinParams, // includes bet, lines, times
+        command: selection.command,
+        commandParam: selection.param,
+      };
 
-    // After selection, we are in a new "choicing" state, awaiting the result.
-    this.setState(ConnectionState.PLAYER_CHOICING);
-    return this.send('gamectrl3', {
-      gameid,
-      ctrlid,
-      ctrlname: 'selectfree',
-      ctrlparam,
-    }).then(() => {
+      // After selection, we are in a new "choicing" state, awaiting the result.
+      this.setState(ConnectionState.PLAYER_CHOICING);
+      await this.send('gamectrl3', {
+        gameid,
+        ctrlid,
+        ctrlname: 'selectfree',
+        ctrlparam,
+      });
+
       // Similar to spin, return the latest GMI info
       const gmi = this.userInfo.lastGMI;
       const totalwin = this.userInfo.lastTotalWin ?? 0;
@@ -308,7 +333,9 @@ export class SlotcraftClient {
     if (this.state !== ConnectionState.DISCONNECTED) {
       this.setState(ConnectionState.DISCONNECTED);
     }
+    // Reject any pending commands and clear the operation queue.
     this.rejectAllPendingRequests('Client disconnected.');
+    this._rejectAllQueuedOperations('Client disconnected.');
   }
 
   public send(cmdid: string, params: any = {}): Promise<any> {
@@ -364,6 +391,70 @@ export class SlotcraftClient {
 
   // --- Private Handlers ---
 
+  /**
+   * @private
+   * Wraps a user-facing operation, adding it to a serial queue.
+   * This method is the entry point for all major client actions (`connect`, `spin`, etc.).
+   *
+   * @param executor A function that contains the core logic of the operation and returns a promise.
+   * @returns A new promise that will be resolved or rejected when the actual operation
+   *          is dequeued, executed, and completes.
+   */
+  private _enqueueOperation<T>(executor: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const op = {
+        executor: async () => {
+          try {
+            const result = await executor();
+            resolve(result);
+          } catch (error) {
+            reject(error);
+            // Re-throw to allow the queue processor to log it.
+            throw error;
+          }
+        },
+        reject: reject, // Store the reject function
+      };
+
+      this.operationQueue.push(op);
+
+      // Start processing the queue if it's not already running.
+      this._processQueue();
+    });
+  }
+
+  /**
+   * @private
+   * Processes the operation queue.
+   * It takes one operation from the queue at a time, executes it, and waits for it
+   * to complete before starting the next one. This ensures serial execution.
+   * The `isProcessingQueue` flag prevents this method from running multiple times
+   * concurrently.
+   */
+  private async _processQueue(): Promise<void> {
+    if (this.isProcessingQueue) {
+      return;
+    }
+    this.isProcessingQueue = true;
+
+    try {
+      while (this.operationQueue.length > 0) {
+        const operation = this.operationQueue.shift();
+        if (operation) {
+          try {
+            await operation.executor();
+          } catch (error) {
+            // The promise rejection is already handled by the `_enqueueOperation` wrapper.
+            // We just log it here for visibility and to indicate that the queue is continuing.
+            this.logger.error('Operation in queue failed, but queue continues:', error);
+          }
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
   private emitRawMessage(direction: 'SEND' | 'RECV', message: string): void {
     const payload: RawMessagePayload = { direction, message };
     this.emitter.emit('raw_message', payload);
@@ -379,43 +470,39 @@ export class SlotcraftClient {
   private handleOpen(): void {
     this.reconnectAttempts = 0;
     this.clearReconnectTimer();
-    this.emitter.emit('connect'); // Emit for legacy or internal listeners.
+    this.emitter.emit('connect'); // Crucial for the connect() promise to resolve
     this.setState(ConnectionState.CONNECTED);
 
-    // After connecting, proceed to login.
-    // This handles both initial login and re-login after a reconnect.
-    this._login();
+    // After any connection (initial or reconnect), enqueue a login operation.
+    // This ensures that login is serialized along with any other user actions.
+    this._enqueueOperation(() => this._login()).catch((err) => {
+      this.logger.error('Automatic login after connect/reconnect failed:', err);
+      // If login fails, we are effectively disconnected.
+      this.disconnect();
+    });
   }
 
-  private _login(): void {
+  private async _login(): Promise<void> {
     if (!this.userInfo.token) {
-      const err = new Error('Login failed: token is missing.');
-      this.loginPromise?.reject(err);
-      this.loginPromise = null;
-      this.disconnect(); // Can't login, so disconnect.
-      return;
+      throw new Error('Login failed: token is missing.');
     }
 
     this.setState(ConnectionState.LOGGING_IN);
 
-    this.send('flblogin', {
-      token: this.userInfo.token,
-      language: 'en_US',
-    })
-      .then(() => {
-        this.setState(ConnectionState.LOGGED_IN);
-        this.startHeartbeat();
-        // Resolve the promise created by the public connect() method.
-        this.loginPromise?.resolve();
-        this.loginPromise = null; // Promise is settled, clear it.
-      })
-      .catch((error) => {
-        const reason = error instanceof Error ? error.message : 'Login failed';
-        // Reject the promise from connect() and disconnect.
-        this.loginPromise?.reject(new Error(reason));
-        this.loginPromise = null;
-        this.disconnect();
+    try {
+      await this.send('flblogin', {
+        token: this.userInfo.token,
+        language: 'en_US',
       });
+      this.setState(ConnectionState.LOGGED_IN);
+      this.startHeartbeat();
+    } catch (error) {
+      // If login fails, we disconnect to clean up. The error will be propagated
+      // by the promise returned from _enqueueOperation.
+      this.disconnect();
+      // Re-throw the original error to ensure the caller's promise is rejected.
+      throw error;
+    }
   }
 
   private handleMessage(event: MessageEvent): void {
@@ -634,7 +721,10 @@ export class SlotcraftClient {
     };
     this.emitter.emit('disconnect', payload);
 
+    // On an unclean disconnect, we reject any pending operations and then try to reconnect.
+    // The 'reconnecting' state is now the primary indicator of this situation.
     if (this.state !== ConnectionState.DISCONNECTED && !payload.wasClean) {
+      this._rejectAllQueuedOperations('Connection closed unexpectedly.');
       this.tryReconnect();
     } else {
       this.setState(ConnectionState.DISCONNECTED);
@@ -698,5 +788,21 @@ export class SlotcraftClient {
       request.reject(new Error(reason));
     }
     this.pendingRequests.clear();
+  }
+
+  /**
+   * @private
+   * Clears the operation queue and rejects all pending promises.
+   * This is called when a disconnection occurs to prevent operations from
+   * being stuck in a pending state indefinitely.
+   * @param reason The reason for the rejection.
+   */
+  private _rejectAllQueuedOperations(reason: string): void {
+    while (this.operationQueue.length > 0) {
+      const op = this.operationQueue.shift();
+      if (op) {
+        op.reject(new Error(reason));
+      }
+    }
   }
 }
