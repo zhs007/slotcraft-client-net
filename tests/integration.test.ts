@@ -106,7 +106,12 @@ describe('SlotcraftClient Integration Tests', () => {
 
     it('should handle a spin with win and transition to SPINEND', async () => {
       server.on('gamectrl3', (msg, ws) => {
-        server.send(ws, { msgid: 'gamemoduleinfo', totalwin: 100 });
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          totalwin: 100,
+          // A win requires at least one result to trigger the collect flow.
+          gmi: { replyPlay: { results: [{}] } },
+        });
         server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
       });
       await client.spin({ bet: 1, lines: 25 });
@@ -224,7 +229,12 @@ describe('SlotcraftClient Integration Tests', () => {
           expect(msg.ctrlparam.command).toBe('bg-selectfg');
           expect(msg.ctrlparam.commandParam).toBe('lefty-bugsy-bugsy');
           // Server sends final gmi with win info
-          server.send(ws, { msgid: 'gamemoduleinfo', totalwin: 50 });
+          server.send(ws, {
+            msgid: 'gamemoduleinfo',
+            totalwin: 50,
+            // A win requires at least one result to trigger the collect flow.
+            gmi: { replyPlay: { results: [{}] } },
+          });
           // Then, server confirms the command is ok
           server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
         }

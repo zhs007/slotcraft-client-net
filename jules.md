@@ -189,6 +189,10 @@
     - 移除了内部复杂的 `deriveSequence` 逻辑，该方法现在只发送单个 `collect` 请求。
     - 简化了 `playIndex` 的确定方式：优先使用调用者传入的 `playIndex`；若未传入，则默认为 `lastResultsCount - 1`，即收集最新的一个结果。
     - 为该方法补充了详尽的 JSDoc 注释，阐明了其功能和参数行为。
+  - **精确化 `collect` 触发条件**:
+    - 根据后续反馈，进一步明确了需要进入 `SPINEND`（即需要 `collect`）状态的条件。
+    - 新的条件为：(`totalwin > 0` 且 `results.length >= 1`) 或 (`totalwin == 0` 且 `results.length > 1`)。
+    - 此修改确保了只有在真正需要确认服务器结果时，客户端才会进入等待收集的状态。
   - **实现 Auto-Collect**:
     - 在 `spin` 和 `selectOptional` 的 `cmdret` 处理器中增加了新逻辑。
     - 当一次操作返回多个结果时（`lastResultsCount > 1`），客户端会自动调用 `collect(lastResultsCount - 2)`。

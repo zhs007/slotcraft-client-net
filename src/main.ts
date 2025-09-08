@@ -441,19 +441,29 @@ export class SlotcraftClient {
             case 'gamectrl3': {
               const gmi = this.userInfo.lastGMI;
               const totalwin = this.userInfo.lastTotalWin ?? 0;
+              const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+              // Determine if a collect action is required based on the outcome.
+              // A collect is needed if:
+              //   1. There is a win (totalwin > 0) AND there is at least one result stage.
+              //   2. There is no win (totalwin === 0) BUT there are multiple result stages
+              //      (e.g., for a multi-stage feature that ends with no prize).
+              const needsCollect =
+                (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
 
               if (this.state === ConnectionState.SPINNING) {
                 // For a standard spin, check if it resulted in a player choice scenario.
                 if (gmi?.replyPlay?.finished === false) {
                   this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
-                } else if (totalwin > 0) {
+                } else if (needsCollect) {
                   this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
                 } else {
                   this.setState(ConnectionState.IN_GAME);
                 }
               } else if (this.state === ConnectionState.PLAYER_CHOICING) {
-                // After a player choice, decide the outcome.
-                if (totalwin > 0) {
+                // After a player choice, a nested choice is not possible.
+                // We only need to decide if the outcome requires a collect.
+                if (needsCollect) {
                   this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
                 } else {
                   this.setState(ConnectionState.IN_GAME);
