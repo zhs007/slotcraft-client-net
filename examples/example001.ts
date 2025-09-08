@@ -109,69 +109,14 @@ const main = async () => {
   client.on('state', onState as any);
 
   /**
-   * This is the main game loop. It checks the client's state and decides the next action.
-   * This logic is crucial for handling game resume scenarios correctly.
+   * A simple demonstration function that iterates through available line options
+   * and performs a set number of spins for each.
    */
-  const gameLoop = async () => {
-    try {
-      // Loop indefinitely, breaking out only when all actions are complete.
-      while (true) {
-        const state = client.getState();
-        const userInfo = client.getUserInfo();
-        console.log(`Main loop entered. Current state: ${state}`);
-
-        if (state === 'SPINEND') {
-          console.log('State is SPINEND. Awaiting collection.');
-          const { lastTotalWin, lastResultsCount } = userInfo;
-          console.log(
-            `Win detected. totalwin=${lastTotalWin}, results=${lastResultsCount}. Will collect to continue...`
-          );
-          await client.collect();
-          console.log('Collect finished. Re-evaluating state...');
-          continue; // Loop again to check the new state (should be IN_GAME)
-        }
-
-        if (state === 'WAITTING_PLAYER') {
-          console.log('State is WAITTING_PLAYER. Awaiting player selection.');
-          if (userInfo.optionals && userInfo.optionals.length > 0) {
-            const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
-            console.log(
-              `Found ${userInfo.optionals.length} options. Randomly selecting index: ${randomIndex}`
-            );
-            await client.selectOptional(randomIndex);
-            console.log('Selection sent. Re-evaluating state...');
-            continue; // Loop again to see the outcome of the selection
-          } else {
-            console.error('In WAITTING_PLAYER state but no optionals found. Disconnecting.');
-            client.disconnect();
-            break;
-          }
-        }
-
-        if (state === 'IN_GAME') {
-          console.log('State is IN_GAME. Starting spin sequence.');
-          // Once we are in the standard "IN_GAME" state, we can run the main spin logic.
-          await spinAcrossLines();
-          // After the spin sequence is complete, we are done.
-          break;
-        }
-
-        // If the state is not one of the above, it's an unexpected state for the loop to handle.
-        console.error(`Game loop in unhandled state: ${state}. Disconnecting.`);
-        client.disconnect();
-        break;
-      }
-    } catch (error) {
-      console.error('An error occurred in the game loop:', error);
-      client.disconnect();
-    }
-  };
-
   const spinAcrossLines = async () => {
     const opts = client.getUserInfo().linesOptions || [];
     if (!opts.length) {
       console.warn('No linesOptions available; cannot perform spins.');
-      return; // Return instead of disconnecting, allows loop to terminate gracefully.
+      return;
     }
     console.log('Starting sequential spins over lines options:', opts);
 
@@ -179,35 +124,33 @@ const main = async () => {
       console.log(`--- Lines=${lines} ---`);
       for (let i = 0; i < 100; i++) {
         console.log(`Spin #${i + 1}/100 with lines=${lines}...`);
-        // We start in IN_GAME, so a spin is safe.
         await client.spin({ lines });
 
-        // After spin, the state could be SPINEND, WAITTING_PLAYER, or back to IN_GAME.
-        // The main gameLoop is designed to handle this, so we can just let it re-evaluate.
-        // For simplicity in this example, we'll handle the immediate results here,
-        // mirroring the logic from the main loop.
-
-        let currentState = client.getState();
-        if (currentState === 'WAITTING_PLAYER') {
-          const userInfo = client.getUserInfo();
-          if (userInfo.optionals && userInfo.optionals.length > 0) {
-            const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
-            console.log(`Spin resulted in a choice. Randomly selecting: ${randomIndex}`);
-            await client.selectOptional(randomIndex);
+        // After a spin, the game might require a choice or a collect.
+        // This inner loop handles those cases before the next spin.
+        while (client.getState() !== 'IN_GAME') {
+          const state = client.getState();
+          if (state === 'WAITTING_PLAYER') {
+            const userInfo = client.getUserInfo();
+            if (userInfo.optionals && userInfo.optionals.length > 0) {
+              const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+              console.log(`Spin resulted in a choice. Randomly selecting: ${randomIndex}`);
+              await client.selectOptional(randomIndex);
+            } else {
+              console.error('In WAITTING_PLAYER state but no optionals found; breaking spin loop.');
+              return; // Exit the main spin function
+            }
+          } else if (state === 'SPINEND') {
+            const { lastTotalWin, lastResultsCount } = client.getUserInfo();
+            console.log(
+              `Action resulted in a win. totalwin=${lastTotalWin}, results=${lastResultsCount}. Collecting...`
+            );
+            await client.collect();
+            console.log('Collect finished.');
+          } else {
+            console.error(`Spin resulted in unhandled state ${state}; breaking spin loop.`);
+            return; // Exit the main spin function
           }
-        }
-
-        // After a spin or a selection, we might need to collect.
-        currentState = client.getState();
-        if (currentState === 'SPINEND') {
-          const { lastTotalWin, lastResultsCount } = client.getUserInfo();
-          console.log(
-            `Action resulted in a win. totalwin=${lastTotalWin}, results=${lastResultsCount}. Collecting...`
-          );
-          await client.collect();
-          console.log('Collect finished.');
-        } else {
-          console.log('No win on this action.');
         }
       }
     }
@@ -221,15 +164,41 @@ const main = async () => {
 
     // 2. Enter the game
     await client.enterGame();
-    console.log(`Entered game ${GAME_CODE}. Current state: ${client.getState()}`);
+    console.log(`Entered game ${GAME_CODE}. Initial state: ${client.getState()}`);
 
-    // 3. Start the main game loop to handle resume states and then normal play.
-    await gameLoop();
+    // 3. Handle Resume Logic
+    // Before starting new spins, we must handle any state the game was left in.
+    // This loop ensures we 'collect' any pending wins or make any required 'selections'
+    // until the client is in the standard 'IN_GAME' state.
+    while (client.getState() !== 'IN_GAME') {
+      const state = client.getState();
+      console.log(`Handling resume state: ${state}`);
 
-    console.log('Game loop finished. Disconnecting.');
+      if (state === 'SPINEND') {
+        await client.collect();
+      } else if (state === 'WAITTING_PLAYER') {
+        const userInfo = client.getUserInfo();
+        if (userInfo.optionals && userInfo.optionals.length > 0) {
+          const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+          await client.selectOptional(randomIndex);
+        } else {
+          throw new Error('In WAITTING_PLAYER state on resume, but no optionals found.');
+        }
+      } else {
+        // This case should ideally not be reached if the library's state machine is correct.
+        throw new Error(`Unhandled resume state: ${state}. Cannot proceed.`);
+      }
+    }
+
+    // 4. Start Main Spin Logic
+    // Now that any resume states have been handled, the client is ready for new actions.
+    console.log('Resume states handled. Client is IN_GAME. Starting main spin sequence.');
+    await spinAcrossLines();
+
+    console.log('Example script finished. Disconnecting.');
     client.disconnect();
   } catch (error) {
-    console.error('Failed during client lifecycle:', error);
+    console.error('An error occurred during the client lifecycle:', error);
     if (client.getState() !== 'DISCONNECTED') {
       client.disconnect();
     }
