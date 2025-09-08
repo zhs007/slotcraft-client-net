@@ -231,8 +231,9 @@ export class SlotcraftClient {
       // The playIndex is 0-based, so it's `length - 1`.
       indexToCollect = lastResultsCount - 1;
     } else if (typeof lastPlayIndex === 'number') {
-      // As a fallback, use the last known playIndex from server messages.
-      indexToCollect = lastPlayIndex;
+      // As a fallback, use the last known playIndex from server messages and
+      // increment it to collect the next sequential result.
+      indexToCollect = lastPlayIndex + 1;
     }
 
     if (typeof indexToCollect !== 'number') {

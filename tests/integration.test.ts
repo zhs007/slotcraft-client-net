@@ -202,6 +202,25 @@ describe('SlotcraftClient Integration Tests', () => {
       // On failure, the state should revert to SPINEND to allow a retry.
       expect(client.getState()).toBe(ConnectionState.SPINEND);
     });
+
+    it('should use lastPlayIndex + 1 as a fallback when collecting', async () => {
+      // Manually set the state to be valid for collect
+      (client as any).setState(ConnectionState.SPINEND);
+      // Set lastPlayIndex, but ensure lastResultsCount is undefined to force the fallback
+      (client as any).userInfo.lastPlayIndex = 0;
+      (client as any).userInfo.lastResultsCount = undefined;
+
+      const collectHandler = vi.fn((msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
+      });
+      server.on('collect', collectHandler);
+
+      await client.collect();
+
+      // Verify the collect was called with the incremented index
+      expect(collectHandler).toHaveBeenCalledTimes(1);
+      expect(collectHandler.mock.calls[0][0].playIndex).toBe(1);
+    });
   });
 
   describe('Player Choice Flow', () => {
