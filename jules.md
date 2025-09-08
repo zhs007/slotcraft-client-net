@@ -253,3 +253,14 @@
 - **产出**:
   - `jules/plan022.md`
   - `jules/plan022-report.md`
+
+### 2025-09-08: Refactor Example Script to Use Enums (Plan 023)
+
+- **目标**: 根据用户关于代码质量的反馈，将 `examples/example001.ts` 中用于状态比较的字符串字面量，重构为使用官方的 `ConnectionState` 枚举。
+- **实施**:
+  - **导入枚举**: 在示例脚本中添加了 `ConnectionState` 的导入。
+  - **替换字符串**: 将脚本中所有如 `'IN_GAME'`, `'SPINEND'` 等硬编码的字符串替换为 `ConnectionState.IN_GAME`, `ConnectionState.SPINEND` 等对应的枚举成员。
+- **成果**: 提高了示例代码的类型安全性和可维护性，使其成为一个更规范、更健壮的用例，从而更好地指导开发者。
+- **产出**:
+  - `jules/plan023.md`
+  - `jules/plan023-report.md`

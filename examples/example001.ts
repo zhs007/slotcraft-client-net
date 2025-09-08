@@ -19,7 +19,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'ws';
 import { SlotcraftClient } from '../src/main';
-import { RawMessagePayload } from '../src/types';
+import { ConnectionState, RawMessagePayload } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.
 (global as any).WebSocket = WebSocket;
@@ -128,9 +128,9 @@ const main = async () => {
 
         // After a spin, the game might require a choice or a collect.
         // This inner loop handles those cases before the next spin.
-        while (client.getState() !== 'IN_GAME') {
+        while (client.getState() !== ConnectionState.IN_GAME) {
           const state = client.getState();
-          if (state === 'WAITTING_PLAYER') {
+          if (state === ConnectionState.WAITTING_PLAYER) {
             const userInfo = client.getUserInfo();
             if (userInfo.optionals && userInfo.optionals.length > 0) {
               const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
@@ -140,7 +140,7 @@ const main = async () => {
               console.error('In WAITTING_PLAYER state but no optionals found; breaking spin loop.');
               return; // Exit the main spin function
             }
-          } else if (state === 'SPINEND') {
+          } else if (state === ConnectionState.SPINEND) {
             const { lastTotalWin, lastResultsCount } = client.getUserInfo();
             console.log(
               `Action resulted in a win. totalwin=${lastTotalWin}, results=${lastResultsCount}. Collecting...`
@@ -170,13 +170,13 @@ const main = async () => {
     // Before starting new spins, we must handle any state the game was left in.
     // This loop ensures we 'collect' any pending wins or make any required 'selections'
     // until the client is in the standard 'IN_GAME' state.
-    while (client.getState() !== 'IN_GAME') {
+    while (client.getState() !== ConnectionState.IN_GAME) {
       const state = client.getState();
       console.log(`Handling resume state: ${state}`);
 
-      if (state === 'SPINEND') {
+      if (state === ConnectionState.SPINEND) {
         await client.collect();
-      } else if (state === 'WAITTING_PLAYER') {
+      } else if (state === ConnectionState.WAITTING_PLAYER) {
         const userInfo = client.getUserInfo();
         if (userInfo.optionals && userInfo.optionals.length > 0) {
           const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
@@ -199,7 +199,7 @@ const main = async () => {
     client.disconnect();
   } catch (error) {
     console.error('An error occurred during the client lifecycle:', error);
-    if (client.getState() !== 'DISCONNECTED') {
+    if (client.getState() !== ConnectionState.DISCONNECTED) {
       client.disconnect();
     }
     process.exit(1);
