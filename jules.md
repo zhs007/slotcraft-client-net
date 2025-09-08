@@ -187,7 +187,8 @@
 - **实施**:
   - **`collect` 方法重构**:
     - 移除了内部复杂的 `deriveSequence` 逻辑，该方法现在只发送单个 `collect` 请求。
-    - 简化了 `playIndex` 的确定方式：优先使用调用者传入的 `playIndex`；若未传入，则默认为 `lastResultsCount - 1`，即收集最新的一个结果。
+    - 简化了 `playIndex` 的确定方式：优先使用调用者传入的 `playIndex`；若未传入，则默认为 `lastResultsCount - 1`。
+    - 修复了一个备用逻辑中的错误，当 `lastResultsCount` 不可用时，现在会正确使用 `lastPlayIndex + 1` 而不是 `lastPlayIndex`。
     - 为该方法补充了详尽的 JSDoc 注释，阐明了其功能和参数行为。
   - **精确化 `collect` 触发条件**:
     - 根据后续反馈，进一步明确了需要进入 `SPINEND`（即需要 `collect`）状态的条件。

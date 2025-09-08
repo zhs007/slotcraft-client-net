@@ -12,7 +12,7 @@ This task involved a significant refactoring of the `collect` method and the int
 - **Simplified `playIndex` Logic**: The method now follows a clear, simple rule for determining the `playIndex`:
   1.  Use the `playIndex` if it's explicitly provided.
   2.  If not provided, default to `lastResultsCount - 1` (the index of the final result).
-  3.  As a fallback, use the cached `lastPlayIndex` if `lastResultsCount` is unavailable.
+  3.  As a fallback, use the cached `lastPlayIndex + 1` if `lastResultsCount` is unavailable. This was a final correction to a bug where the old `lastPlayIndex` was being re-used.
 - **Improved Commenting**: Added comprehensive JSDoc comments to the `collect` method explaining its purpose, parameters, and the new logic.
 
 ### b. Auto-Collect Implementation
