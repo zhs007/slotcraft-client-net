@@ -741,6 +741,17 @@ export class SlotcraftClient {
               command,
               param: nextCommandParams[i],
             }));
+
+            // If we enter a player choice state AND the spin params haven't been set
+            // (which happens when resuming), then we must initialize them from the GMI.
+            // In a normal spin->choice flow, `curSpinParams` will have already been set by `spin()`.
+            if (!this.userInfo.curSpinParams) {
+              this.userInfo.curSpinParams = {
+                bet: g.bet,
+                lines: g.lines,
+                times: 1,
+              };
+            }
           }
         }
         break;

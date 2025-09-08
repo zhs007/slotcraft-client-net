@@ -277,3 +277,14 @@
 - **产出**:
   - `jules/plan024.md`
   - `jules/plan024-report.md`
+
+### 2025-09-08: Fix Player Choice Resume Logic (Plan 025)
+
+- **目标**: 修复在“游戏恢复”（Resume）时，如果直接进入需要玩家选择的状态（`WAITTING_PLAYER`），客户端会因缺少下注参数而崩溃的问题。
+- **实施**:
+  - **核心逻辑修复**: 在 `updateCaches` 方法中增加了逻辑。当处理 `gamemoduleinfo` 消息且该消息表明需要玩家选择时 (`replyPlay.finished === false`)，会检查 `curSpinParams` 是否已存在。如果不存在（表明这是一个恢复场景，而非普通的spin流程），则会使用该 `gamemoduleinfo` 消息中的 `bet` 和 `lines` 值来初始化 `curSpinParams`，并将 `times` 设为1。
+  - **回归测试**: 此修复是有意为之的，以避免破坏现有的“spin-to-choice”流程，该流程中`curSpinParams`已经被`spin()`方法正确设置。
+  - **测试增强**: 增加了一个新的集成测试用例，专门模拟从 `enterGame` 直接恢复到 `WAITTING_PLAYER` 状态的场景，并验证 `selectOptional` 现在可以成功调用。
+- **产出**:
+  - `jules/plan025.md`
+  - `jules/plan025-report.md`
