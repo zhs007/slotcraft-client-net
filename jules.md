@@ -313,3 +313,12 @@
 - **产出**:
   - `jules/plan027.md`
   - `jules/plan027-report.md`
+
+## 9. Utilities
+
+### `transformSceneData(data)`
+
+- **Source**: `src/utils.ts`
+- **Description**: A utility function designed to simplify the complex `defaultScene` object received from the server into a more usable format.
+- **Input**: Takes a raw scene data object, which typically has a structure like `{ values: [{ values: [1, 2] }, ...] }`.
+- **Output**: Returns a simple 2D array of numbers (e.g., `[[1, 2], ...]`). This flattened structure is easier to work with in the game logic. The function is robust and handles malformed or empty inputs by returning an empty array.

@@ -8,3 +8,4 @@
 
 export { SlotcraftClient } from './main';
 export * from './types';
+export * from './utils';
