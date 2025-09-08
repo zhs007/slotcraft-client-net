@@ -173,7 +173,7 @@ export class SlotcraftClient {
       // The client is now entering the game. The final state (IN_GAME, SPINEND, etc.)
       // will be determined by the cmdret handler for 'comeingame3', which processes
       // the server's response and handles any potential "resume" scenarios.
-      this.setState(ConnectionState.RESUMING);
+      this.setState(ConnectionState.ENTERING_GAME);
       return this.send('comeingame3', {
         gamecode: gamecodeToUse,
         tableid: '',
@@ -367,7 +367,7 @@ export class SlotcraftClient {
     const allowedStates = [
       ConnectionState.LOGGING_IN,
       ConnectionState.LOGGED_IN,
-      ConnectionState.RESUMING, // <-- Replaces ENTERING_GAME for comeingame3
+      ConnectionState.ENTERING_GAME,
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
       ConnectionState.PLAYER_CHOICING,
@@ -491,15 +491,20 @@ export class SlotcraftClient {
     this.reconnectAttempts = 0;
     this.clearReconnectTimer();
     this.emitter.emit('connect'); // Crucial for the connect() promise to resolve
+
+    const previousState = this.state;
     this.setState(ConnectionState.CONNECTED);
 
-    // After any connection (initial or reconnect), enqueue a login operation.
-    // This ensures that login is serialized along with any other user actions.
-    this._enqueueOperation(() => this._login()).catch((err) => {
-      this.logger.error('Automatic login after connect/reconnect failed:', err);
-      // If login fails, we are effectively disconnected.
-      this.disconnect();
-    });
+    // After a RECONNECT, we must automatically log in again.
+    // For an initial connection, the login is handled by the `connect()` method.
+    // This distinction prevents a double-login race condition on initial connection.
+    if (previousState === ConnectionState.RECONNECTING) {
+      this._enqueueOperation(() => this._login()).catch((err) => {
+        this.logger.error('Automatic re-login after reconnect failed:', err);
+        // If login fails, we are effectively disconnected.
+        this.disconnect();
+      });
+    }
   }
 
   private async _login(): Promise<void> {
@@ -604,15 +609,15 @@ export class SlotcraftClient {
               break;
             }
             case 'comeingame3': {
-              // This is the crucial handler for the "resume" feature. After the server
+              // This is the crucial handler for entering a game. After the server
               // acknowledges 'comeingame3', the client might be in a fresh state or might
               // need to resume a previously unfinished game. The logic here is nearly
               // identical to the 'gamectrl3' handler, as both scenarios can result in a
               // win state that needs collection or a state waiting for player input.
 
-              if (this.state !== ConnectionState.RESUMING) {
-                // This handler should only run when resuming. If we are in another
-                // state, something is wrong. Log a warning and do nothing.
+              if (this.state !== ConnectionState.ENTERING_GAME) {
+                // This handler should only run when entering a game. If we are in
+                // another state, something is wrong. Log a warning and do nothing.
                 this.logger.warn(
                   `Received cmdret for 'comeingame3' in unexpected state: ${this.state}`
                 );

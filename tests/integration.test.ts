@@ -294,7 +294,7 @@ describe('SlotcraftClient Integration Tests', () => {
 
       // Check the state transitions
       const transitions = stateSpy.mock.calls.map((call) => call[0].current);
-      expect(transitions).toContain(ConnectionState.RESUMING);
+      expect(transitions).toContain(ConnectionState.ENTERING_GAME);
       expect(transitions[transitions.length - 1]).toBe(ConnectionState.SPINEND);
     });
 
@@ -688,6 +688,35 @@ describe('SlotcraftClient Integration Tests', () => {
       await vi.waitFor(() => expect(client.getUserInfo().lastPlayWin).toBe(500));
       // gmi.totalwin should still be cached as lastTotalWin
       expect(client.getUserInfo().lastTotalWin).toBe(1000);
+    });
+  });
+
+  describe('BugFixes: Plan 026', () => {
+    it('should not log in twice and should use correct state for entering game', async () => {
+      client = getClient();
+      const loginHandler = vi.fn((msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      server.on('flblogin', loginHandler);
+
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+      });
+
+      const stateSpy = vi.fn();
+      client.on('state', stateSpy);
+
+      await client.connect(TEST_TOKEN);
+      await client.enterGame(TEST_GAME_CODE);
+
+      // 1. Verify login only happens once
+      expect(loginHandler).toHaveBeenCalledOnce();
+
+      // 2. Verify state transitions
+      const transitions = stateSpy.mock.calls.map((call) => call[0].current);
+      // Check that the client transitions through ENTERING_GAME
+      expect(transitions).toContain(ConnectionState.ENTERING_GAME);
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
   });
 });
