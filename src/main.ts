@@ -50,6 +50,22 @@ export class SlotcraftClient {
    */
   private isProcessingQueue = false;
 
+  /**
+   * Creates an instance of SlotcraftClient.
+   *
+   * @param options - Configuration options for the client.
+   * @param options.url - The WebSocket URL of the game server.
+   * @param options.token - Optional: The login token.
+   * @param options.gamecode - Optional: The game code to enter.
+   * @param options.businessid - Optional: The business ID for analytics and server-side logic. Defaults to `''`.
+   * @param options.clienttype - Optional: The type of client. Defaults to `'web'`.
+   * @param options.jurisdiction - Optional: The legal jurisdiction. Defaults to `'MT'`.
+   * @param options.language - Optional: The session language. Defaults to `'en'`.
+   * @param options.maxReconnectAttempts - Optional: Max reconnection attempts. Defaults to `10`.
+   * @param options.reconnectDelay - Optional: Initial reconnection delay in ms. Defaults to `1000`.
+   * @param options.requestTimeout - Optional: Timeout for a single request in ms. Defaults to `10000`.
+   * @param options.logger - Optional: A custom logger. Defaults to `console`.
+   */
   constructor(options: SlotcraftClientOptions) {
     this.options = {
       maxReconnectAttempts: 10,
@@ -58,9 +74,13 @@ export class SlotcraftClient {
       ...options,
     };
 
-    // Cache token and gamecode from constructor options
+    // Cache token, gamecode, and other context from constructor options
     this.userInfo.token = options.token;
     this.userInfo.gamecode = options.gamecode;
+    this.userInfo.businessid = options.businessid ?? '';
+    this.userInfo.clienttype = options.clienttype ?? 'web';
+    this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
+    this.userInfo.language = options.language ?? 'en';
 
     if (options.logger === null) {
       // If logger is explicitly null, use a no-op logger
@@ -492,7 +512,11 @@ export class SlotcraftClient {
     try {
       await this.send('flblogin', {
         token: this.userInfo.token,
-        language: 'en_US',
+        businessid: this.userInfo.businessid,
+        clienttype: this.userInfo.clienttype,
+        jurisdiction: this.userInfo.jurisdiction,
+        language: this.userInfo.language,
+        gamecode: this.userInfo.gamecode, // Also pass gamecode here
       });
       this.setState(ConnectionState.LOGGED_IN);
       this.startHeartbeat();

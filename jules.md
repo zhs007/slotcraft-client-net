@@ -264,3 +264,16 @@
 - **产出**:
   - `jules/plan023.md`
   - `jules/plan023-report.md`
+
+### 2025-09-08: Enhance Constructor with Additional Context (Plan 024)
+
+- **目标**: 扩展 `SlotcraftClient` 的构造函数，使其可以接受额外的业务参数，并自动将这些参数包含在登录请求中。
+- **实施**:
+  - **扩展构造函数**: `SlotcraftClient` 的构造函数现在接受四个新的可选参数：`businessid` (默认为 `''`), `clienttype` (默认为 `'web'`), `jurisdiction` (默认为 `'MT'`), 和 `language` (默认为 `'en'`).
+  - **更新登录负载**: `_login` 方法被修改，以将这四个新参数包含在 `flblogin` 命令的负载中，从而向服务器提供更丰富的客户端上下文。
+  - **补充文档和测试**:
+    - 为新的构造函数参数添加了详尽的 JSDoc 注释。
+    - 在 `tests/integration.test.ts` 中增加了新的单元测试，以验证这些新参数是否被正确地包含在登录请求中。
+- **产出**:
+  - `jules/plan024.md`
+  - `jules/plan024-report.md`

@@ -55,20 +55,50 @@ describe('SlotcraftClient Integration Tests', () => {
   });
 
   describe('Connection and Login', () => {
-    it('should connect, login, and transition to LOGGED_IN state', async () => {
+    it('should connect, login with default parameters, and transition to LOGGED_IN state', async () => {
       const loginHandler = vi.fn((msg, ws) => {
         expect(msg.token).toBe(TEST_TOKEN);
+        // Verify default parameters
+        expect(msg.businessid).toBe('');
+        expect(msg.clienttype).toBe('web');
+        expect(msg.jurisdiction).toBe('MT');
+        expect(msg.language).toBe('en');
         server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
       });
       server.on('flblogin', loginHandler);
-      client = getClient();
+      client = getClient({ token: TEST_TOKEN }); // Pass token here
 
-      // The connect promise resolves when the operation is complete.
-      await client.connect(TEST_TOKEN);
+      await client.connect();
 
-      // Due to the async nature of the queue, we wait for the state to settle.
       await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGED_IN));
+      expect(loginHandler).toHaveBeenCalledOnce();
+    });
 
+    it('should use custom parameters from constructor in login payload', async () => {
+      const customOptions = {
+        token: TEST_TOKEN,
+        gamecode: TEST_GAME_CODE,
+        businessid: 'test-biz',
+        clienttype: 'mobile',
+        jurisdiction: 'UK',
+        language: 'fr',
+      };
+
+      const loginHandler = vi.fn((msg, ws) => {
+        expect(msg.token).toBe(customOptions.token);
+        expect(msg.gamecode).toBe(customOptions.gamecode);
+        expect(msg.businessid).toBe(customOptions.businessid);
+        expect(msg.clienttype).toBe(customOptions.clienttype);
+        expect(msg.jurisdiction).toBe(customOptions.jurisdiction);
+        expect(msg.language).toBe(customOptions.language);
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      server.on('flblogin', loginHandler);
+
+      client = getClient(customOptions);
+      await client.connect(); // No need to pass token again
+
+      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGED_IN));
       expect(loginHandler).toHaveBeenCalledOnce();
     });
   });
