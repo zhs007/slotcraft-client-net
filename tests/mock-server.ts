@@ -16,12 +16,13 @@ export class MockServer {
   public clients: Set<WebSocket> = new Set();
 
   /**
-   * Starts the WebSocket server on a random available port.
+   * Starts the WebSocket server on a given or random available port.
+   * @param port The port to listen on. If 0 or undefined, a random port is used.
    * @returns {Promise<number>} A promise that resolves with the port number.
    */
-  public start(): Promise<number> {
+  public start(port: number = 0): Promise<number> {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port: 0 }); // 0 means random port
+      this.wss = new WebSocketServer({ port });
 
       this.wss.on('connection', (ws: WebSocket) => {
         this.clients.add(ws);
@@ -91,6 +92,18 @@ export class MockServer {
   public broadcast(message: any): void {
     for (const client of this.clients) {
       this.send(client, message);
+    }
+  }
+
+  /**
+   * Forcibly terminates all client connections without a clean close.
+   * This is useful for simulating network failures.
+   */
+  public terminateAll(): void {
+    if (this.wss) {
+      for (const client of this.clients) {
+        client.terminate();
+      }
     }
   }
 
