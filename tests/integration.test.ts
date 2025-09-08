@@ -44,6 +44,8 @@ describe('SlotcraftClient Integration Tests', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    // Clear any pending timers to prevent them from leaking between tests
+    vi.clearAllTimers();
     if (client) {
       client.disconnect();
     }
@@ -466,69 +468,57 @@ describe('SlotcraftClient Integration Tests', () => {
       vi.useRealTimers();
     });
 
-    // TODO: This test is flaky. It relies on vi.waitFor and fake timers to orchestrate
-    // a sequence of asynchronous network failure events. This has proven unreliable across
-    // test environments. Skipping to ensure a stable CI build.
-    it.skip('should give up after max reconnect attempts', async () => {
-      vi.useFakeTimers();
-      client = getClient({ maxReconnectAttempts: 2, reconnectDelay: 10 });
-      const reconnectingHandler = vi.fn();
-      client.on('reconnecting', reconnectingHandler);
+    it('should give up after max reconnect attempts (direct call)', () => {
+      const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      client = getClient({ maxReconnectAttempts: 2, reconnectDelay: 50, logger });
+      const clientAny = client as any;
 
-      server.on('flblogin', (msg, ws) =>
-        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true })
-      );
-      await client.connect(TEST_TOKEN);
-      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGED_IN));
+      // Manually set state to something that allows reconnecting
+      clientAny.state = ConnectionState.RECONNECTING;
 
-      // Terminate connection, and keep the server down
-      server.terminateAll();
+      // Call tryReconnect manually
+      clientAny.tryReconnect(); // attempt 1
+      expect(clientAny.reconnectAttempts).toBe(1);
 
-      // Wait for the first reconnect attempt, then advance the timer for its connect() call
-      await vi.waitFor(() => expect(reconnectingHandler).toHaveBeenCalledWith({ attempt: 1 }));
-      await vi.advanceTimersByTimeAsync(10);
+      clientAny.tryReconnect(); // attempt 2
+      expect(clientAny.reconnectAttempts).toBe(2);
 
-      // The connection will fail, triggering the second reconnect attempt
-      await vi.waitFor(() => expect(reconnectingHandler).toHaveBeenCalledWith({ attempt: 2 }));
-      await vi.advanceTimersByTimeAsync(20);
-
-      // It will now fail the max attempts check and go to disconnected
-      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.DISCONNECTED));
-      expect(reconnectingHandler).toHaveBeenCalledTimes(2);
-
-      vi.useRealTimers();
+      // This one should trigger the "give up" logic
+      clientAny.tryReconnect();
+      expect(logger.error).toHaveBeenCalledWith('Max reconnection attempts reached. Giving up.');
+      expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
     });
 
-    // TODO: This test is flaky. It fails intermittently due to a race condition between
-    // the mock server's immediate response and the fake timer for the request timeout
-    // inside the send() method. Skipping to ensure a stable CI build.
-    it.skip('should handle a failed heartbeat by logging a warning', async () => {
+    it('should handle a failed heartbeat by logging a warning (direct call)', () => {
       vi.useFakeTimers();
       const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
-      client = getClient({ logger, requestTimeout: 5000 });
+      client = getClient({ logger });
+      const clientAny = client as any;
 
-      server.on('flblogin', (msg, ws) =>
-        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true })
-      );
-      server.on('keepalive', (msg, ws) => {
-        server.send(ws, { msgid: 'cmdret', cmdid: 'keepalive', isok: false });
+      // Mock the send method to reject for 'keepalive'
+      const originalSend = client.send.bind(client);
+      vi.spyOn(client, 'send').mockImplementation(async (cmdid, params) => {
+        if (cmdid === 'keepalive') {
+          return Promise.reject(new Error('Fake heartbeat failure'));
+        }
+        return originalSend(cmdid, params);
       });
 
-      await client.connect(TEST_TOKEN);
-      await vi.waitFor(() => expect(client.getState()).toBe(ConnectionState.LOGGED_IN));
+      // Manually call startHeartbeat
+      clientAny.startHeartbeat();
 
-      // Trigger heartbeat
-      await vi.advanceTimersByTimeAsync(30000);
+      // Manually trigger the interval
+      const intervalId = clientAny.heartbeatInterval;
+      expect(intervalId).toBeDefined();
+      vi.advanceTimersByTimeAsync(30000);
 
-      // Wait for the promise rejection to be processed
-      await vi.advanceTimersByTimeAsync(1);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        'Heartbeat failed:',
-        new Error("Command 'keepalive' failed.")
-      );
-
-      vi.useRealTimers();
+      // The catch block is async, so wait for logger to be called
+      return vi.waitFor(() => {
+        expect(logger.warn).toHaveBeenCalledWith(
+          'Heartbeat failed:',
+          expect.objectContaining({ message: 'Fake heartbeat failure' })
+        );
+      });
     });
 
     it('should reject send() from disallowed states', async () => {
