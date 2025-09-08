@@ -50,6 +50,22 @@ export class SlotcraftClient {
    */
   private isProcessingQueue = false;
 
+  /**
+   * Creates an instance of SlotcraftClient.
+   *
+   * @param options - Configuration options for the client.
+   * @param options.url - The WebSocket URL of the game server.
+   * @param options.token - Optional: The login token.
+   * @param options.gamecode - Optional: The game code to enter.
+   * @param options.businessid - Optional: The business ID for analytics and server-side logic. Defaults to `''`.
+   * @param options.clienttype - Optional: The type of client. Defaults to `'web'`.
+   * @param options.jurisdiction - Optional: The legal jurisdiction. Defaults to `'MT'`.
+   * @param options.language - Optional: The session language. Defaults to `'en'`.
+   * @param options.maxReconnectAttempts - Optional: Max reconnection attempts. Defaults to `10`.
+   * @param options.reconnectDelay - Optional: Initial reconnection delay in ms. Defaults to `1000`.
+   * @param options.requestTimeout - Optional: Timeout for a single request in ms. Defaults to `10000`.
+   * @param options.logger - Optional: A custom logger. Defaults to `console`.
+   */
   constructor(options: SlotcraftClientOptions) {
     this.options = {
       maxReconnectAttempts: 10,
@@ -58,9 +74,13 @@ export class SlotcraftClient {
       ...options,
     };
 
-    // Cache token and gamecode from constructor options
+    // Cache token, gamecode, and other context from constructor options
     this.userInfo.token = options.token;
     this.userInfo.gamecode = options.gamecode;
+    this.userInfo.businessid = options.businessid ?? '';
+    this.userInfo.clienttype = options.clienttype ?? 'web';
+    this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
+    this.userInfo.language = options.language ?? 'en';
 
     if (options.logger === null) {
       // If logger is explicitly null, use a no-op logger
@@ -150,15 +170,15 @@ export class SlotcraftClient {
       }
       this.userInfo.gamecode = gamecodeToUse;
 
+      // The client is now entering the game. The final state (IN_GAME, SPINEND, etc.)
+      // will be determined by the cmdret handler for 'comeingame3', which processes
+      // the server's response and handles any potential "resume" scenarios.
       this.setState(ConnectionState.ENTERING_GAME);
-      const response = await this.send('comeingame3', {
+      return this.send('comeingame3', {
         gamecode: gamecodeToUse,
         tableid: '',
         isreconnect: false,
       });
-
-      this.setState(ConnectionState.IN_GAME);
-      return response;
     });
   }
 
@@ -348,6 +368,7 @@ export class SlotcraftClient {
       ConnectionState.LOGGING_IN,
       ConnectionState.LOGGED_IN,
       ConnectionState.ENTERING_GAME,
+      ConnectionState.RESUMING,
       ConnectionState.IN_GAME,
       ConnectionState.SPINNING,
       ConnectionState.PLAYER_CHOICING,
@@ -471,15 +492,20 @@ export class SlotcraftClient {
     this.reconnectAttempts = 0;
     this.clearReconnectTimer();
     this.emitter.emit('connect'); // Crucial for the connect() promise to resolve
+
+    const previousState = this.state;
     this.setState(ConnectionState.CONNECTED);
 
-    // After any connection (initial or reconnect), enqueue a login operation.
-    // This ensures that login is serialized along with any other user actions.
-    this._enqueueOperation(() => this._login()).catch((err) => {
-      this.logger.error('Automatic login after connect/reconnect failed:', err);
-      // If login fails, we are effectively disconnected.
-      this.disconnect();
-    });
+    // After a RECONNECT, we must automatically log in again.
+    // For an initial connection, the login is handled by the `connect()` method.
+    // This distinction prevents a double-login race condition on initial connection.
+    if (previousState === ConnectionState.RECONNECTING) {
+      this._enqueueOperation(() => this._login()).catch((err) => {
+        this.logger.error('Automatic re-login after reconnect failed:', err);
+        // If login fails, we are effectively disconnected.
+        this.disconnect();
+      });
+    }
   }
 
   private async _login(): Promise<void> {
@@ -492,7 +518,11 @@ export class SlotcraftClient {
     try {
       await this.send('flblogin', {
         token: this.userInfo.token,
-        language: 'en_US',
+        businessid: this.userInfo.businessid,
+        clienttype: this.userInfo.clienttype,
+        jurisdiction: this.userInfo.jurisdiction,
+        language: this.userInfo.language,
+        gamecode: this.userInfo.gamecode, // Also pass gamecode here
       });
       this.setState(ConnectionState.LOGGED_IN);
       this.startHeartbeat();
@@ -580,7 +610,64 @@ export class SlotcraftClient {
               break;
             }
             case 'comeingame3': {
-              // enterGame() promise chain already moves to IN_GAME on success
+              // This is the crucial handler for entering a game. After the server
+              // acknowledges 'comeingame3', the client might be in a fresh state or might
+              // need to resume a previously unfinished game. The logic here is nearly
+              // identical to the 'gamectrl3' handler, as both scenarios can result in a
+              // win state that needs collection or a state waiting for player input.
+
+              if (this.state !== ConnectionState.ENTERING_GAME) {
+                // This handler should only run when entering a game. If we are in
+                // another state, something is wrong. Log a warning and do nothing.
+                this.logger.warn(
+                  `Received cmdret for 'comeingame3' in unexpected state: ${this.state}`
+                );
+                break;
+              }
+
+              const gmi = this.userInfo.lastGMI;
+              const totalwin = this.userInfo.lastTotalWin ?? 0;
+              const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+              // This condition determines if the game round has ended and requires a 'collect'
+              // action from the user. It's true if there's a win, or if there are multiple
+              // result stages (e.g., a feature that ends with no win).
+              const needsCollect =
+                (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+
+              const isPlayerChoice = gmi?.replyPlay?.finished === false;
+
+              // If the game state is unfinished, it's a resume scenario.
+              // Set the transient RESUMING state to clearly signal this event.
+              if (isPlayerChoice || needsCollect) {
+                this.setState(ConnectionState.RESUMING);
+              }
+
+              // Now, transition to the specific state required.
+              if (isPlayerChoice) {
+                this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+              } else if (needsCollect) {
+                // If a collect is needed, transition to SPINEND.
+                this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+              } else {
+                // Otherwise, the game is in a standard playable state.
+                this.setState(ConnectionState.IN_GAME);
+              }
+
+              // Just like after a regular spin, if the resume state includes multiple
+              // results, we auto-collect the second-to-last one to streamline the UX.
+              if (
+                this.userInfo.lastResultsCount &&
+                this.userInfo.lastResultsCount > 1
+              ) {
+                const autoCollectIndex = this.userInfo.lastResultsCount - 2;
+                this.collect(autoCollectIndex).catch((err) => {
+                  this.logger.warn(
+                    `Auto-collect on resume for playIndex ${autoCollectIndex} failed:`,
+                    err
+                  );
+                });
+              }
               break;
             }
             case 'collect': {
@@ -668,6 +755,17 @@ export class SlotcraftClient {
               command,
               param: nextCommandParams[i],
             }));
+
+            // If we enter a player choice state AND the spin params haven't been set
+            // (which happens when resuming), then we must initialize them from the GMI.
+            // In a normal spin->choice flow, `curSpinParams` will have already been set by `spin()`.
+            if (!this.userInfo.curSpinParams) {
+              this.userInfo.curSpinParams = {
+                bet: g.bet,
+                lines: g.lines,
+                times: 1,
+              };
+            }
           }
         }
         break;

@@ -19,7 +19,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'ws';
 import { SlotcraftClient } from '../src/main';
-import { RawMessagePayload } from '../src/types';
+import { ConnectionState, RawMessagePayload } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.
 (global as any).WebSocket = WebSocket;
@@ -28,7 +28,7 @@ import { RawMessagePayload } from '../src/types';
 
 dotenv.config();
 
-const { WEBSOCKET_URL, TOKEN, GAME_CODE } = process.env;
+const { WEBSOCKET_URL, TOKEN, GAME_CODE, BUSINESSID } = process.env;
 const LOG_FILE = 'msg001.txt';
 
 if (!WEBSOCKET_URL || !TOKEN || !GAME_CODE) {
@@ -62,6 +62,7 @@ const main = async () => {
     url: WEBSOCKET_URL,
     token: TOKEN,
     gamecode: GAME_CODE,
+    businessid: BUSINESSID || 'default',
   });
 
   // Setup logging
@@ -108,76 +109,103 @@ const main = async () => {
   };
   client.on('state', onState as any);
 
+  /**
+   * A simple demonstration function that iterates through available line options
+   * and performs a set number of spins for each.
+   */
   const spinAcrossLines = async () => {
-    try {
-      // Already IN_GAME: read linesOptions directly
-      const opts = client.getUserInfo().linesOptions || [];
-      if (!opts.length) {
-        console.warn('No linesOptions available after entering IN_GAME; skipping spins.');
-        client.disconnect();
-        return;
-      }
-      console.log('Starting sequential spins over lines options:', opts);
-      // spin() now returns the latest GMI summary at cmdret
+    const opts = client.getUserInfo().linesOptions || [];
+    if (!opts.length) {
+      console.warn('No linesOptions available; cannot perform spins.');
+      return;
+    }
+    console.log('Starting sequential spins over lines options:', opts);
 
-      for (const lines of opts) {
-        console.log(`--- Lines=${lines} ---`);
-        for (let i = 0; i < 100; i++) {
-          console.log(`Spin #${i + 1}/100 with lines=${lines}...`);
-          let { totalwin, results } = (await client.spin({ lines })) as any;
+    for (const lines of opts) {
+      console.log(`--- Lines=${lines} ---`);
+      for (let i = 0; i < 100; i++) {
+        console.log(`Spin #${i + 1}/100 with lines=${lines}...`);
+        await client.spin({ lines });
 
-          const userInfo = client.getUserInfo();
-          if (userInfo.optionals && userInfo.optionals.length > 0) {
-            const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
-            console.log(`Randomly selecting optional index: ${randomIndex}`);
-            const newret = (await client.selectOptional(randomIndex).catch((err) => {
-              console.error('Failed to select optional:', err);
-              client.disconnect();
-            })) as any;
-
-            totalwin = newret.totalwin;
-            results = newret.results;
-          }
-
-          if (totalwin > 0) {
-            console.log(
-              `Win detected. totalwin=${totalwin}, results=${results}. Will collect to continue...`
-            );
-            try {
-              // Collect sequence: client.collect() derives playIndex plan (pre + final) if needed
-              await client.collect();
-              console.log('Collect finished.');
-            } catch (err) {
-              console.warn('Collect failed; retrying spins may be blocked until resolved:', err);
-              break;
+        // After a spin, the game might require a choice or a collect.
+        // This inner loop handles those cases before the next spin.
+        while (client.getState() !== ConnectionState.IN_GAME) {
+          const state = client.getState();
+          if (state === ConnectionState.WAITTING_PLAYER) {
+            const userInfo = client.getUserInfo();
+            if (userInfo.optionals && userInfo.optionals.length > 0) {
+              const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+              console.log(`Spin resulted in a choice. Randomly selecting: ${randomIndex}`);
+              await client.selectOptional(randomIndex);
+            } else {
+              console.error('In WAITTING_PLAYER state but no optionals found; breaking spin loop.');
+              return; // Exit the main spin function
             }
+          } else if (state === ConnectionState.SPINEND) {
+            const { lastTotalWin, lastResultsCount } = client.getUserInfo();
+            console.log(
+              `Action resulted in a win. totalwin=${lastTotalWin}, results=${lastResultsCount}. Collecting...`
+            );
+            await client.collect();
+            console.log('Collect finished.');
           } else {
-            console.log('No win on this spin.');
+            console.error(`Spin resulted in unhandled state ${state}; breaking spin loop.`);
+            return; // Exit the main spin function
           }
         }
       }
-      console.log('Finished spinning across all lines. Disconnecting.');
-      client.disconnect();
-    } catch (error) {
-      console.error('Failed to send game action:', error);
-      client.disconnect();
     }
+    console.log('Finished spinning across all lines.');
   };
 
   try {
-    // 1. Connect and log in (token is now read from constructor options)
+    // 1. Connect and log in
     await client.connect();
     console.log('Client connected and logged in successfully.');
 
-    // 2. Enter the game (gamecode is now read from constructor options)
+    // 2. Enter the game
     await client.enterGame();
-    console.log(`Entered game ${GAME_CODE}. Using enterGame cmdret to start spins immediately.`);
+    console.log(`Entered game ${GAME_CODE}. Initial state: ${client.getState()}`);
 
-    // Start spins immediately after enterGame returns (cmdret should indicate comeingame)
-    spinAcrossLines();
-  } catch (error) {
-    console.error('Failed during connection or entering game:', error);
+    // 3. Handle Resume Logic
+    // Before starting new spins, we must handle any state the game was left in.
+    // This loop ensures we 'collect' any pending wins or make any required 'selections'
+    // until the client is in the standard 'IN_GAME' state.
+    while (client.getState() !== ConnectionState.IN_GAME) {
+      const state = client.getState();
+      console.log(`Handling resume state: ${state}`);
+
+      if (state === ConnectionState.SPINEND) {
+        await client.collect();
+      } else if (state === ConnectionState.WAITTING_PLAYER) {
+        const userInfo = client.getUserInfo();
+        if (userInfo.optionals && userInfo.optionals.length > 0) {
+          const randomIndex = Math.floor(Math.random() * userInfo.optionals.length);
+          await client.selectOptional(randomIndex);
+        } else {
+          throw new Error('In WAITTING_PLAYER state on resume, but no optionals found.');
+        }
+      } else if (state === ConnectionState.RESUMING) {
+        // This is a transient state. We wait for the next state change.
+        await new Promise((resolve) => client.once('state', resolve));
+      } else {
+        // This case should ideally not be reached if the library's state machine is correct.
+        throw new Error(`Unhandled resume state: ${state}. Cannot proceed.`);
+      }
+    }
+
+    // 4. Start Main Spin Logic
+    // Now that any resume states have been handled, the client is ready for new actions.
+    console.log('Resume states handled. Client is IN_GAME. Starting main spin sequence.');
+    await spinAcrossLines();
+
+    console.log('Example script finished. Disconnecting.');
     client.disconnect();
+  } catch (error) {
+    console.error('An error occurred during the client lifecycle:', error);
+    if (client.getState() !== ConnectionState.DISCONNECTED) {
+      client.disconnect();
+    }
     process.exit(1);
   }
 };

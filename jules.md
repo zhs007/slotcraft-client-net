@@ -229,3 +229,87 @@
 - **产出**:
   - `jules/plan019.md`
   - `jules/plan019-report.md`
+
+### 2025-09-08: Implement Game Resume Logic (Plan 020)
+
+- **目标**: 实现“游戏恢复”（Resume）功能。当用户 `enterGame` 时，如果服务器返回一个未完成的游戏状态（例如，有待收集的奖励或待做的选择），客户端需要能正确地恢复到该状态。
+- **实施**:
+  - **新增 `RESUMING` 状态**: 在 `ConnectionState` 中加入了 `RESUMING` 状态，用于明确表示客户端正在处理 `comeingame` 的响应。`enterGame` 方法现在会进入此状态。
+  - **`cmdret` 驱动状态恢复**: 核心恢复逻辑被实现在 `comeingame3` 的 `cmdret` 处理器中。此处理器会检查 `gamemoduleinfo` 的内容，并根据 `replyPlay.finished` 和 `totalwin` 等字段，决定将客户端转换到 `WAITTING_PLAYER`、`SPINEND` 还是 `IN_GAME` 状态。这确保了状态转换的原子性和准确性。
+  - **复用 Auto-Collect**: 在恢复流程中，如果检测到有多个待处理结果，会自动复用现有的 `auto-collect` 逻辑来确认中间结果，优化了用户体验。
+  - **补充注释和测试**: 为新的状态和逻辑流程补充了详尽的 JSDoc 注释，并新增了专门的集成测试用例来验证所有恢复场景。
+- **产出**:
+  - `jules/plan020.md`
+  - `jules/plan020-report.md`
+
+### 2025-09-08: Simplify Example Script for Clarity (Plan 022)
+
+- **目标**: 根据用户反馈，重构 `examples/example001.ts` 示例脚本，简化其游戏恢复逻辑，使其更清晰、更易于理解。
+- **实施**:
+  - **移除游戏循环**: 删除了原有的 `gameLoop` 函数，因为它对一个示例来说过于复杂。
+  - **线性化恢复逻辑**: 在 `enterGame()` 调用之后，直接内联实现了一个简单的 `while` 循环。此循环专门负责处理恢复状态（`SPINEND`, `WAITTING_PLAYER`），直到客户端状态变为 `IN_GAME`。
+  - **增加注释**: 为恢复逻辑和核心的 `spinAcrossLines` 函数调用添加了明确的注释，以阐明脚本的执行流程。
+- **成果**: 最终的示例脚本现在能以一种非常直接和易于理解的方式来演示核心功能，包括如何处理游戏恢复，显著提升了作为教学工具的价值。
+- **产出**:
+  - `jules/plan022.md`
+  - `jules/plan022-report.md`
+
+### 2025-09-08: Refactor Example Script to Use Enums (Plan 023)
+
+- **目标**: 根据用户关于代码质量的反馈，将 `examples/example001.ts` 中用于状态比较的字符串字面量，重构为使用官方的 `ConnectionState` 枚举。
+- **实施**:
+  - **导入枚举**: 在示例脚本中添加了 `ConnectionState` 的导入。
+  - **替换字符串**: 将脚本中所有如 `'IN_GAME'`, `'SPINEND'` 等硬编码的字符串替换为 `ConnectionState.IN_GAME`, `ConnectionState.SPINEND` 等对应的枚举成员。
+- **成果**: 提高了示例代码的类型安全性和可维护性，使其成为一个更规范、更健壮的用例，从而更好地指导开发者。
+- **产出**:
+  - `jules/plan023.md`
+  - `jules/plan023-report.md`
+
+### 2025-09-08: Enhance Constructor with Additional Context (Plan 024)
+
+- **目标**: 扩展 `SlotcraftClient` 的构造函数，使其可以接受额外的业务参数，并自动将这些参数包含在登录请求中。
+- **实施**:
+  - **扩展构造函数**: `SlotcraftClient` 的构造函数现在接受四个新的可选参数：`businessid` (默认为 `''`), `clienttype` (默认为 `'web'`), `jurisdiction` (默认为 `'MT'`), 和 `language` (默认为 `'en'`).
+  - **更新登录负载**: `_login` 方法被修改，以将这四个新参数包含在 `flblogin` 命令的负载中，从而向服务器提供更丰富的客户端上下文。
+  - **补充文档和测试**:
+    - 为新的构造函数参数添加了详尽的 JSDoc 注释。
+    - 在 `tests/integration.test.ts` 中增加了新的单元测试，以验证这些新参数是否被正确地包含在登录请求中。
+- **产出**:
+  - `jules/plan024.md`
+  - `jules/plan024-report.md`
+
+### 2025-09-08: Fix Player Choice Resume Logic (Plan 025)
+
+- **目标**: 修复在“游戏恢复”（Resume）时，如果直接进入需要玩家选择的状态（`WAITTING_PLAYER`），客户端会因缺少下注参数而崩溃的问题。
+- **实施**:
+  - **核心逻辑修复**: 在 `updateCaches` 方法中增加了逻辑。当处理 `gamemoduleinfo` 消息且该消息表明需要玩家选择时 (`replyPlay.finished === false`)，会检查 `curSpinParams` 是否已存在。如果不存在（表明这是一个恢复场景，而非普通的spin流程），则会使用该 `gamemoduleinfo` 消息中的 `bet` 和 `lines` 值来初始化 `curSpinParams`，并将 `times` 设为1。
+  - **回归测试**: 此修复是有意为之的，以避免破坏现有的“spin-to-choice”流程，该流程中`curSpinParams`已经被`spin()`方法正确设置。
+  - **测试增强**: 增加了一个新的集成测试用例，专门模拟从 `enterGame` 直接恢复到 `WAITTING_PLAYER` 状态的场景，并验证 `selectOptional` 现在可以成功调用。
+- **产出**:
+  - `jules/plan025.md`
+  - `jules/plan025-report.md`
+
+### 2025-09-08: Fix Login and State Machine Bugs (Plan 026)
+
+- **目标**: 根据用户反馈，修复客户端重复登录以及游戏进入时状态不明确的问题。
+- **实施**:
+  - **修复重复登录**:
+    - **问题**: `connect()` 方法和 `handleOpen()` 事件处理器都会触发登录，导致在初次连接时发送两次 `flblogin` 命令。
+    - **解决方案**: 修改了 `handleOpen()` 的逻辑，使其仅在“断线重连”后才自动触发登录。`connect()` 方法则继续负责“初次连接”时的登录。通过在 `handleOpen()` 中检查连接前的状态（`previousState`），成功地区分了这两种场景。
+  - **优化状态机**:
+    - **问题**: `enterGame()` 方法会立即将状态设置为 `RESUMING`，该命名具有误导性。
+    - **解决方案**: 重构了游戏进入流程，将 `enterGame()` 的初始状态修改为 `ENTERING_GAME`。这个状态更准确地描述了“正在进入游戏，等待服务器响应”的阶段。相应地，完全移除了原有的 `RESUMING` 状态，并更新了所有相关的代码和测试，使状态机更清晰、更严谨。
+- **产出**:
+  - `jules/plan026.md`
+  - `jules/plan026-report.md`
+
+### 2025-09-08: Refine RESUMING State Logic (Plan 027)
+
+- **目标**: 根据用户追加的反馈，重新引入 `RESUMING` 状态，并为其赋予更精确的、用于标记“游戏恢复”事件的语义。
+- **实施**:
+  - **恢复 RESUMING 状态**: 在 `ConnectionState` 枚举中重新加入了 `RESUMING` 状态，并更新了其注释，明确它是一个短暂的过渡状态。
+  - **调整状态转换**: 修改了 `enterGame` 的响应处理器。现在，当检测到需要恢复游戏时（例如有待处理的奖励或选择），客户端会先将状态设置为 `RESUMING`，然后再转换到如 `SPINEND` 等具体状态。这使得状态流`ENTERING_GAME` -> `RESUMING` -> `SPINEND` 更加清晰。
+  - **更新客户端代码**: 相应地更新了 `examples/example001.ts` 中的恢复逻辑和 `tests/integration.test.ts` 中的测试用例，以正确处理并验证这个新的状态转换序列。
+- **产出**:
+  - `jules/plan027.md`
+  - `jules/plan027-report.md`

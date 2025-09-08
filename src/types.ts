@@ -18,6 +18,8 @@ export enum ConnectionState {
   LOGGED_IN = 'LOGGED_IN',
   /** The client is in the process of entering a game. */
   ENTERING_GAME = 'ENTERING_GAME',
+  /** A transient state indicating that the client is processing a game state that needs to be resumed (e.g., pending wins or choices). */
+  RESUMING = 'RESUMING',
   /** The client is in a game and ready to send/receive game messages. */
   IN_GAME = 'IN_GAME',
   /** The client is waiting for the player to make a selection. */
@@ -55,6 +57,26 @@ export interface SlotcraftClientOptions {
   token?: string;
   /** Optional: The game code to enter. Can also be provided to the `enterGame` method. */
   gamecode?: string;
+  /**
+   * Optional: The business ID for the client.
+   * @default ''
+   */
+  businessid?: string;
+  /**
+   * Optional: The type of the client.
+   * @default 'web'
+   */
+  clienttype?: string;
+  /**
+   * Optional: The jurisdiction for the client.
+   * @default 'MT'
+   */
+  jurisdiction?: string;
+  /**
+   * Optional: The language for the client.
+   * @default 'en'
+   */
+  language?: string;
   /** Optional: Maximum number of reconnection attempts. Defaults to 10. */
   maxReconnectAttempts?: number;
   /** Optional: Initial reconnection delay in ms. Defaults to 1000. */
@@ -108,6 +130,9 @@ export interface StateChangePayload {
 export interface UserInfo {
   // Session/login
   token?: string;
+  businessid?: string;
+  clienttype?: string;
+  language?: string;
   // Identity
   pid?: string;
   uid?: number;
