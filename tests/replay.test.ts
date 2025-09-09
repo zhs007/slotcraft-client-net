@@ -174,4 +174,76 @@ describe('SlotcraftClient Replay Mode', () => {
       await expect(client.selectOptional(0)).rejects.toThrow('Cannot selectOptional in state');
     });
   });
+
+  describe('Replay Data Parsing', () => {
+    it('should handle replay data with missing optional fields', async () => {
+      const data = {
+        msgid: 'gamemoduleinfo',
+        // Omitting gameid, gmi, etc.
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(data),
+      });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      // Should not have crashed and fields should be undefined
+      expect(userInfo.gameid).toBeUndefined();
+      expect(userInfo.lastGMI).toEqual({});
+      expect(userInfo.lastTotalWin).toBeUndefined();
+    });
+
+    it('should handle replay data with gmi but missing nested fields', async () => {
+      const data = {
+        msgid: 'gamemoduleinfo',
+        gmi: {
+          // no playIndex, totalwin, etc.
+        },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(data),
+      });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      expect(userInfo.lastPlayIndex).toBeUndefined();
+      expect(userInfo.lastTotalWin).toBeUndefined();
+      expect(userInfo.lastResultsCount).toBeUndefined();
+      expect(userInfo.defaultScene).toBeUndefined();
+    });
+
+    it('should ignore messages with incorrect msgid', async () => {
+      const data = { msgid: 'some_other_msg' };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(data),
+      });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      // updateCaches should have returned early, so no properties are set
+      expect(userInfo.gameid).toBeUndefined();
+      expect(userInfo.lastGMI).toBeUndefined();
+    });
+
+    it('should transition to IN_GAME if totalwin is 0 and results are missing', async () => {
+      const data = {
+        msgid: 'gamemoduleinfo',
+        gmi: { totalwin: 0 },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(data),
+      });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+    });
+  });
 });
