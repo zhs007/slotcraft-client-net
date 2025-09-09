@@ -117,24 +117,10 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     this.setState(ConnectionState.ENTERING_GAME);
 
-    // Process the loaded replay data.
-    // It can be a single gamemoduleinfo object (old format)
-    // or a wrapper { gamemoduleinfo, gamecfg } (new format).
-    if (this.replayData.msgid === 'gamemoduleinfo') {
-      // Handle old format
-      this.updateCaches(this.replayData);
-      this.emitter.emit('message', this.replayData);
-    } else {
-      // Handle new format
-      if (this.replayData.gamemoduleinfo) {
-        this.updateCaches(this.replayData.gamemoduleinfo);
-        this.emitter.emit('message', this.replayData.gamemoduleinfo);
-      }
-      if (this.replayData.gamecfg) {
-        this._processGameCfg(this.replayData.gamecfg);
-        this.emitter.emit('message', this.replayData.gamecfg);
-      }
-    }
+    // In replay mode, the entire JSON file is treated as a single message
+    // that sets up the whole state.
+    this.updateCaches(this.replayData);
+    this.emitter.emit('message', this.replayData);
 
     const gmi = this.userInfo.lastGMI;
     const totalwin = this.userInfo.lastTotalWin ?? 0;
@@ -250,33 +236,10 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     if (g.defaultScene) {
       this.userInfo.defaultScene = transformSceneData(g.defaultScene);
     }
-  }
 
-  private _processGameCfg(msg: any): void {
-    if (typeof msg.defaultLinebet === 'number')
-      this.userInfo.defaultLinebet = msg.defaultLinebet;
-    if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
-    if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
-    if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
-    if (typeof msg.data === 'string') {
-      try {
-        this.userInfo.gamecfgData = JSON.parse(msg.data);
-        // If no explicit bets array for lines, derive from gamecfgData keys
-        if (!Array.isArray((msg as any).bets) && this.userInfo.gamecfgData) {
-          const keys = Object.keys(this.userInfo.gamecfgData)
-            .map((k) => Number(k))
-            .filter((n) => Number.isFinite(n));
-          if (keys.length) this.userInfo.linesOptions = keys.sort((a, b) => a - b);
-        }
-      } catch {
-        // keep as undefined if parse fails
-        this.userInfo.gamecfgData = undefined;
-      }
-    }
-    // If server provides bets array, prefer it as lines options
-    if (Array.isArray((msg as any).bets)) {
-      const betsArr = (msg as any).bets.filter((n: any) => typeof n === 'number');
-      if (betsArr.length) this.userInfo.linesOptions = [...betsArr].sort((a, b) => a - b);
+    // Per user feedback, initialize linesOptions from playCtrlParam if it exists.
+    if (typeof msg.playCtrlParam?.lines === 'number') {
+      this.userInfo.linesOptions = [msg.playCtrlParam.lines];
     }
   }
 }
