@@ -117,8 +117,9 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     this.setState(ConnectionState.ENTERING_GAME);
 
-    // In replay mode, enterGame just puts us in the ready state.
-    // The spin method will trigger the actual data processing.
+    // In replay mode, enterGame pre-caches configuration data and then
+    // puts the client in the ready state.
+    this._updateConfigCaches(this.replayData);
     this.setState(ConnectionState.IN_GAME);
 
     return Promise.resolve({ isok: true, cmdid: 'comeingame3' });
@@ -135,7 +136,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     this.setState(ConnectionState.SPINNING);
 
-    // In replay mode, the "spin" processes the pre-loaded JSON file.
+    // The "spin" processes the result-specific parts of the pre-loaded JSON file.
     this.updateCaches(this.replayData);
     this.emitter.emit('message', this.replayData);
 
@@ -214,10 +215,26 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     this.emitter.emit('raw_message', payload);
   }
 
-  private updateCaches(msg: any): void {
+  /** Caches config-like properties that should be available before the first spin. */
+  private _updateConfigCaches(msg: any): void {
     if (msg.msgid !== 'gamemoduleinfo') return;
 
     if (typeof msg.gameid === 'number') this.userInfo.gameid = msg.gameid;
+
+    const g = msg.gmi || {};
+    if (g.defaultScene) {
+      this.userInfo.defaultScene = transformSceneData(g.defaultScene);
+    }
+
+    if (typeof msg.playCtrlParam?.lines === 'number') {
+      this.userInfo.linesOptions = [msg.playCtrlParam.lines];
+    }
+  }
+
+  /** Caches properties related to a spin result. */
+  private updateCaches(msg: any): void {
+    if (msg.msgid !== 'gamemoduleinfo') return;
+
     const g = msg.gmi || {};
     this.userInfo.lastGMI = g;
 
@@ -243,14 +260,5 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
       ? msg.results
       : undefined;
     if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
-
-    if (g.defaultScene) {
-      this.userInfo.defaultScene = transformSceneData(g.defaultScene);
-    }
-
-    // Per user feedback, initialize linesOptions from playCtrlParam if it exists.
-    if (typeof msg.playCtrlParam?.lines === 'number') {
-      this.userInfo.linesOptions = [msg.playCtrlParam.lines];
-    }
   }
 }

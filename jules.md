@@ -316,11 +316,11 @@
 
 ### 2025-09-08: Refactor Replay Mode Logic (Plan 030)
 
-- **目标**: 重构回放（Replay）模式的逻辑，使其行为更贴近真实网络环境。
+- **目标**: 重构回放（Replay）模式的逻辑，使其行为更贴近真实网络环境，并根据用户反馈进行微调。
 - **实施**:
-  - **重构 `enterGame`**: 在回放模式下，`enterGame` 方法现在仅负责将客户端状态转换到 `IN_GAME`，不再处理游戏结果数据。
-  - **重构 `spin`**: `spin` 方法现在是回放模式的核心。它负责处理预加载的 JSON 数据，更新客户端缓存，并根据结果将状态转换为 `SPINEND` 或 `WAITTING_PLAYER` 等，从而完整地模拟一个 `spin` 周期。
-  - **更新测试**: 相应地修改了 `tests/replay.test.ts` 中的测试用例，以验证新的逻辑流程。
+  - **拆分缓存逻辑**: `enterGame` 方法现在负责预先加载和缓存游戏配置类信息（如 `linesOptions`, `defaultScene`），确保这些信息在首次 `spin` 前可用。
+  - **聚焦 `spin` 方法**: `spin` 方法现在专注于处理单次旋转的结果，包括更新 `lastGMI`、`totalwin` 等，并根据结果将状态转换为 `SPINEND` 或 `WAITTING_PLAYER`。
+  - **更新测试**: 对应地调整了 `tests/replay.test.ts`，增加了对 `enterGame` 缓存配置能力的测试。
 - **产出**:
   - `jules/plan030.md`
   - `jules/plan030-report.md`
@@ -347,8 +347,8 @@ For debugging and testing purposes, the `SlotcraftClient` can be initialized in 
 ### Logic Flow (Replay Mode)
 
 - **`connect()`**: Fetches the entire replay JSON file and stores it in memory. It also simulates a successful connection and login, setting the client state to `LOGGED_IN`.
-- **`enterGame()`**: This method's role is minimal. It simply transitions the client state from `LOGGED_IN` to `IN_GAME`, making the client ready for the main action. It does **not** process the game result data from the JSON file.
-- **`spin()`**: This is the primary action method in replay mode. When called, it processes the stored JSON data, updates all the user info caches (`lastGMI`, `totalwin`, etc.), and transitions the client to the appropriate final state (`SPINEND` for a win, `WAITTING_PLAYER` for a choice, or back to `IN_GAME` for a no-win scenario). This mimics a full spin cycle in the live environment.
+- **`enterGame()`**: This method pre-caches game configuration data. It parses the replay file to populate values like `linesOptions` and `defaultScene` that are needed before a spin. It then transitions the client state to `IN_GAME`.
+- **`spin()`**: This is the primary action method in replay mode. When called, it processes the **result-specific** parts of the stored JSON data, updating caches like `lastGMI`, `totalwin`, and `lastResultsCount`. It then transitions the client to the appropriate final state (`SPINEND` for a win, `WAITTING_PLAYER` for a choice, or back to `IN_GAME` for a no-win scenario), mimicking a full spin cycle.
 
 ### Use Case
 

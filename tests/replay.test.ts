@@ -259,7 +259,7 @@ describe('SlotcraftClient Replay Mode', () => {
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
-    it('should populate linesOptions from playCtrlParam.lines', async () => {
+    it('should populate linesOptions from playCtrlParam.lines after enterGame', async () => {
       const data = {
         msgid: 'gamemoduleinfo',
         playCtrlParam: {
@@ -272,10 +272,21 @@ describe('SlotcraftClient Replay Mode', () => {
       });
       client = getClient({ gamecode: 'test' });
       await client.connect();
-      await client.enterGame();
-      await client.spin({ lines: 1 }); // spin to trigger parsing
+      await client.enterGame(); // Config data should be parsed here.
       const userInfo = client.getUserInfo();
       expect(userInfo.linesOptions).toEqual([123]);
+    });
+
+    it('should pre-cache config data like gameid and defaultScene after enterGame', async () => {
+      // Using the default mockReplayData which has these fields
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      expect(userInfo.gameid).toBe(mockReplayData.gameid);
+      expect(userInfo.defaultScene).toEqual([[1, 2]]);
+      // Spin-result data should not be present yet
+      expect(userInfo.lastGMI).toBeUndefined();
     });
   });
 });
