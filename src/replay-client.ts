@@ -117,35 +117,46 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     this.setState(ConnectionState.ENTERING_GAME);
 
-    // In replay mode, the entire JSON file is treated as a single message
-    // that sets up the whole state.
-    this.updateCaches(this.replayData);
-    this.emitter.emit('message', this.replayData);
-
-    const gmi = this.userInfo.lastGMI;
-    const totalwin = this.userInfo.lastTotalWin ?? 0;
-    const resultsCount = this.userInfo.lastResultsCount ?? 0;
-    const needsCollect = (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
-
-    if (needsCollect) {
-      this.setState(ConnectionState.SPINEND, { gmi });
-    } else {
-      this.setState(ConnectionState.IN_GAME);
-    }
+    // In replay mode, enterGame just puts us in the ready state.
+    // The spin method will trigger the actual data processing.
+    this.setState(ConnectionState.IN_GAME);
 
     return Promise.resolve({ isok: true, cmdid: 'comeingame3' });
   }
 
   public async spin(params: SpinParams): Promise<any> {
     if (this.state !== ConnectionState.IN_GAME) {
-      this.logger.warn(`Spin called in non-standard state: ${this.state}. Returning cached data.`);
+      this.logger.warn(`Spin called in non-standard state: ${this.state}.`);
     }
-    // In replay mode, the spin has effectively already happened.
-    // We just return the final result from the loaded data.
+    if (!this.replayData) {
+      // This should not happen if connect() was called, but as a safeguard:
+      throw new Error('Replay data not loaded. Call connect() and enterGame() first.');
+    }
+
+    this.setState(ConnectionState.SPINNING);
+
+    // In replay mode, the "spin" processes the pre-loaded JSON file.
+    this.updateCaches(this.replayData);
+    this.emitter.emit('message', this.replayData);
+
     const gmi = this.userInfo.lastGMI;
     const totalwin = this.userInfo.lastTotalWin ?? 0;
-    const results = this.userInfo.lastResultsCount ?? 0;
-    return Promise.resolve({ gmi, totalwin, results });
+    const resultsCount = this.userInfo.lastResultsCount ?? 0;
+    const finished = this.userInfo.lastGMI?.replyPlay?.finished ?? true;
+
+    if (!finished) {
+      this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+    } else {
+      const needsCollect =
+        (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+      if (needsCollect) {
+        this.setState(ConnectionState.SPINEND, { gmi });
+      } else {
+        this.setState(ConnectionState.IN_GAME);
+      }
+    }
+
+    return Promise.resolve({ gmi, totalwin, results: resultsCount });
   }
 
   public async collect(playIndex?: number): Promise<any> {

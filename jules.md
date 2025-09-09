@@ -314,6 +314,17 @@
   - `jules/plan027.md`
   - `jules/plan027-report.md`
 
+### 2025-09-08: Refactor Replay Mode Logic (Plan 030)
+
+- **目标**: 重构回放（Replay）模式的逻辑，使其行为更贴近真实网络环境。
+- **实施**:
+  - **重构 `enterGame`**: 在回放模式下，`enterGame` 方法现在仅负责将客户端状态转换到 `IN_GAME`，不再处理游戏结果数据。
+  - **重构 `spin`**: `spin` 方法现在是回放模式的核心。它负责处理预加载的 JSON 数据，更新客户端缓存，并根据结果将状态转换为 `SPINEND` 或 `WAITTING_PLAYER` 等，从而完整地模拟一个 `spin` 周期。
+  - **更新测试**: 相应地修改了 `tests/replay.test.ts` 中的测试用例，以验证新的逻辑流程。
+- **产出**:
+  - `jules/plan030.md`
+  - `jules/plan030-report.md`
+
 ## 9. Utilities
 
 ### `transformSceneData(data)`
@@ -331,7 +342,13 @@ For debugging and testing purposes, the `SlotcraftClient` can be initialized in 
 
 - **Initialization**: To activate replay mode, provide an `http` or `https` URL to a valid replay JSON file in the `SlotcraftClient` constructor options.
 - **Data Loading**: When `client.connect()` is called, the client fetches the JSON file from the provided URL. It does not establish any WebSocket connection.
-- **Simulation**: Once the data is loaded, the client simulates the game flow. Methods like `enterGame`, `spin`, and `collect` do not trigger network requests. Instead, they manipulate the client's internal state and return data based on the information in the JSON file, resolving their promises immediately.
+- **Simulation**: Once the data is loaded, the client simulates the game flow. The methods behave in a way that mimics the live client flow.
+
+### Logic Flow (Replay Mode)
+
+- **`connect()`**: Fetches the entire replay JSON file and stores it in memory. It also simulates a successful connection and login, setting the client state to `LOGGED_IN`.
+- **`enterGame()`**: This method's role is minimal. It simply transitions the client state from `LOGGED_IN` to `IN_GAME`, making the client ready for the main action. It does **not** process the game result data from the JSON file.
+- **`spin()`**: This is the primary action method in replay mode. When called, it processes the stored JSON data, updates all the user info caches (`lastGMI`, `totalwin`, etc.), and transitions the client to the appropriate final state (`SPINEND` for a win, `WAITTING_PLAYER` for a choice, or back to `IN_GAME` for a no-win scenario). This mimics a full spin cycle in the live environment.
 
 ### Use Case
 

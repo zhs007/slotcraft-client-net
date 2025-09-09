@@ -102,25 +102,34 @@ describe('SlotcraftClient Replay Mode', () => {
       expect(mockFetch).toHaveBeenCalledWith('https://example.com/replay.json');
     });
 
-    it('should enter game and transition to SPINEND for a win', async () => {
+    it('should enter game and transition to IN_GAME', async () => {
       await client.connect();
       await client.enterGame();
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+    });
+
+    it('should transition to SPINEND after a spin with a win', async () => {
+      await client.connect();
+      await client.enterGame();
+      await client.spin({ lines: 1 }); // Perform the spin
       expect(client.getState()).toBe(ConnectionState.SPINEND);
     });
 
     it('should transition to IN_GAME after collect', async () => {
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // Spin to enter SPINEND state
       await client.collect();
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
-    it('should return cached data on spin', async () => {
+    it('should return replay data on spin', async () => {
       await client.connect();
       await client.enterGame();
-      await client.collect();
       const spinResult = await client.spin({ lines: 1 });
+      // Now, spin should process the data and return it.
       expect(spinResult.totalwin).toBe(mockReplayData.gmi.totalwin);
+      expect(spinResult.results).toBe(mockReplayData.gmi.replyPlay.results.length);
     });
 
     it('should handle disconnect correctly', async () => {
@@ -188,8 +197,9 @@ describe('SlotcraftClient Replay Mode', () => {
       client = getClient({ gamecode: 'test' });
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // spin to trigger parsing
       const userInfo = client.getUserInfo();
-      // Should not have crashed and fields should be undefined
+      // Should not have crashed and fields should be undefined or default
       expect(userInfo.gameid).toBeUndefined();
       expect(userInfo.lastGMI).toEqual({});
       expect(userInfo.lastTotalWin).toBeUndefined();
@@ -209,6 +219,7 @@ describe('SlotcraftClient Replay Mode', () => {
       client = getClient({ gamecode: 'test' });
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // spin to trigger parsing
       const userInfo = client.getUserInfo();
       expect(userInfo.lastPlayIndex).toBeUndefined();
       expect(userInfo.lastTotalWin).toBeUndefined();
@@ -225,6 +236,7 @@ describe('SlotcraftClient Replay Mode', () => {
       client = getClient({ gamecode: 'test' });
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // spin to trigger parsing
       const userInfo = client.getUserInfo();
       // updateCaches should have returned early, so no properties are set
       expect(userInfo.gameid).toBeUndefined();
@@ -243,6 +255,7 @@ describe('SlotcraftClient Replay Mode', () => {
       client = getClient({ gamecode: 'test' });
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // spin to trigger state change
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
 
@@ -260,6 +273,7 @@ describe('SlotcraftClient Replay Mode', () => {
       client = getClient({ gamecode: 'test' });
       await client.connect();
       await client.enterGame();
+      await client.spin({ lines: 1 }); // spin to trigger parsing
       const userInfo = client.getUserInfo();
       expect(userInfo.linesOptions).toEqual([123]);
     });
