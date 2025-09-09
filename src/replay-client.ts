@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { EventEmitter } from './event-emitter';
 import {
   ConnectionState,
@@ -71,12 +70,19 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     }
     this.userInfo.token = tokenToUse;
 
+    const fetchImpl = this.options.fetch ?? (typeof window !== 'undefined' ? window.fetch : undefined);
+    if (!fetchImpl) {
+      throw new Error(
+        'A fetch implementation must be provided in options.fetch in non-browser environments.'
+      );
+    }
+
     this.setState(ConnectionState.CONNECTING);
 
     try {
-      const response = await fetch(this.options.url);
+      const response = await fetchImpl(this.options.url);
       if (!response.ok) {
-        throw new Error(`Failed to fetch replay file: ${response.statusText}`);
+        throw new Error(`Failed to fetch replay file: ${(response as any).statusText}`);
       }
       this.replayData = await response.json();
       this.emitRawMessage('RECV', JSON.stringify(this.replayData));
@@ -86,7 +92,6 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
       // Simulate login
       this.setState(ConnectionState.LOGGING_IN);
-      // In a real scenario, we might get userbaseinfo here. For replay, we can mock it.
       this.userInfo.balance = this.replayData.playCtrlParam?.balance ?? 0;
       this.setState(ConnectionState.LOGGED_IN);
     } catch (error) {

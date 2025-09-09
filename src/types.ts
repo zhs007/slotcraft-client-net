@@ -83,6 +83,12 @@ export interface SlotcraftClientOptions {
   reconnectDelay?: number;
   /** Optional: Timeout for a single request in ms. Defaults to 10000. */
   requestTimeout?: number;
+  /**
+   * Optional: A custom fetch implementation.
+   * Used by Replay Mode in non-browser environments.
+   * If not provided, it will default to the global `fetch`.
+   */
+  fetch?: (url: string, init?: any) => Promise<any>;
   /** Optional: A custom logger. Set to `null` to disable logging. Defaults to `console`. */
   logger?: Logger | null;
 }
