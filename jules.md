@@ -13,6 +13,7 @@
 - **自动重连**: 在网络意外断开时，自动尝试重新连接。
 - **Keep-Alive**: 登录成功后，自动处理心跳消息，维持长连接。
 - **请求超时**: `send` 方法返回的 Promise 会在超时后自动-reject。
+- **回放模式 (Replay Mode)**: 支持通过加载一个包含 `gamemoduleinfo` 的 JSON 文件来模拟完整的游戏流程，无需连接到 WebSocket 服务器。这对于调试、测试和复现特定场景非常有用。
 
 ## 3. 技术规约
 
@@ -313,6 +314,21 @@
 - **产出**:
   - `jules/plan027.md`
   - `jules/plan027-report.md`
+
+### 2025-09-08: Implement Replay Mode (Plan 028)
+
+- **目标**: 增加一种“回放模式”，允许客户端通过加载一个静态 JSON 文件来模拟游戏流程，从而在没有网络连接的情况下进行调试和测试。
+- **实施**:
+  - **扩展构造函数**: `SlotcraftClientOptions` 新增了 `replayUrl` 选项，当该选项被提供时，客户端会进入回放模式，并忽略 `url`。
+  - **模拟连接**: 在回放模式下，`connect()` 方法会模拟一个成功的连接和登录流程，而不会创建真实的 WebSocket 连接。
+  - **加载数据**: `enterGame()` 方法被修改为从 `replayUrl` 获取 JSON 数据。它支持远程 URL 和本地文件路径。获取后，它会使用文件内容来初始化客户端的状态和缓存。
+  - **模拟操作**: `spin()`, `collect()`, `selectOptional()` 等方法被重构，在回放模式下，它们会根据已加载的数据立即返回成功结果并更新状态，而不会发送任何网络请求。
+  - **测试**: 新增了 `examples/example002-replay.ts` 脚本和一个 `replay-data.json` 文件来演示和验证此功能。同时，在 `tests/integration.test.ts` 中增加了专门的单元测试，以确保代码覆盖率和功能正确性。
+- **产出**:
+  - `jules/plan028.md`
+  - `jules/plan028-report.md`
+  - `examples/replay-data.json`
+  - `examples/example002-replay.ts`
 
 ## 9. Utilities
 

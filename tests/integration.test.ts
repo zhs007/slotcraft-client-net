@@ -731,3 +731,108 @@ describe('SlotcraftClient Integration Tests', () => {
     });
   });
 });
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+describe('Replay Mode Integration Tests', () => {
+  const REPLAY_FILE = path.join(__dirname, 'temp-replay.json');
+  let client: SlotcraftClient;
+
+  beforeEach(() => {
+    // Create a mock replay file before each test.
+    // The replay data should accurately reflect a single server message.
+    const replayData = {
+      msgid: 'gamemoduleinfo',
+      gameid: 777,
+      totalwin: 100,
+      gmi: {
+        replyPlay: { results: [{}] },
+      },
+      // In the real client, gamecfg comes as a separate message.
+      // We will test its caching separately if needed, or adjust updateCaches.
+      // For now, we test that the primary message is handled correctly.
+    };
+    fs.writeFileSync(REPLAY_FILE, JSON.stringify(replayData));
+  });
+
+  afterEach(() => {
+    if (client) {
+      client.disconnect();
+    }
+    // Clean up the mock file
+    if (fs.existsSync(REPLAY_FILE)) {
+      fs.unlinkSync(REPLAY_FILE);
+    }
+  });
+
+  it('should run a full flow in replay mode from a local file', async () => {
+    client = new SlotcraftClient({
+      replayUrl: REPLAY_FILE,
+      token: 'replay-token',
+      gamecode: 'replay-game',
+      logger: null,
+    });
+
+    const stateSpy = vi.fn();
+    client.on('state', stateSpy);
+
+    // 1. Connect and Enter Game
+    await client.connect();
+    expect(client.getState()).toBe(ConnectionState.LOGGED_IN);
+
+    await client.enterGame();
+    // The replay data has a win, so it should start in SPINEND
+    expect(client.getState()).toBe(ConnectionState.SPINEND);
+    expect(client.getUserInfo().gameid).toBe(777);
+    expect(client.getUserInfo().lastTotalWin).toBe(100);
+
+    // 2. Collect the initial "resumed" win
+    await client.collect();
+    expect(client.getState()).toBe(ConnectionState.IN_GAME);
+
+    // 3. Spin again (which re-uses the same loaded data)
+    const result = await client.spin({});
+    expect(client.getState()).toBe(ConnectionState.SPINEND);
+    expect(result.totalwin).toBe(100);
+
+    // 4. Collect the second win
+    await client.collect();
+    expect(client.getState()).toBe(ConnectionState.IN_GAME);
+
+    // 5. Verify all state transitions
+    const transitions = stateSpy.mock.calls.map((call) => call[0].current);
+    expect(transitions).toEqual([
+      // connect()
+      ConnectionState.CONNECTING,
+      ConnectionState.CONNECTED,
+      ConnectionState.LOGGING_IN,
+      ConnectionState.LOGGED_IN,
+      // enterGame()
+      ConnectionState.ENTERING_GAME,
+      ConnectionState.RESUMING,
+      ConnectionState.SPINEND,
+      // collect()
+      ConnectionState.COLLECTING,
+      ConnectionState.IN_GAME,
+      // spin()
+      ConnectionState.SPINNING,
+      ConnectionState.SPINEND,
+      // collect()
+      ConnectionState.COLLECTING,
+      ConnectionState.IN_GAME,
+    ]);
+  });
+
+  it('should throw an error if replay file does not exist', async () => {
+    fs.unlinkSync(REPLAY_FILE); // Ensure file is gone
+    client = new SlotcraftClient({
+      replayUrl: REPLAY_FILE,
+      token: 'replay-token', // Still need a token for the connect() check
+      gamecode: 'replay-game', // And a gamecode for the enterGame() check
+      logger: null,
+    });
+    await client.connect();
+    await expect(client.enterGame()).rejects.toThrow(/no such file or directory/);
+  });
+});

@@ -51,8 +51,10 @@ export interface Logger {
  * Configuration options for initializing the SlotcraftClient.
  */
 export interface SlotcraftClientOptions {
-  /** The WebSocket URL of the game server. */
-  url: string;
+  /** The WebSocket URL of the game server. Required if `replayUrl` is not provided. */
+  url?: string;
+  /** The URL to a JSON file for replay mode. If provided, `url` is ignored. */
+  replayUrl?: string;
   /** Optional: The login token. Can also be provided to the `connect` method. */
   token?: string;
   /** Optional: The game code to enter. Can also be provided to the `enterGame` method. */

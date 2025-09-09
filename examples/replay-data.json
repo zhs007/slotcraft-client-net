@@ -1,0 +1,51 @@
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "hoodlums",
+  "gameid": 61146,
+  "playCtrlParam": {
+    "autonums": -1,
+    "bet": 1,
+    "lines": 450,
+    "times": 1,
+    "gameid": 61146,
+    "gamecode": "hoodlums",
+    "cheatcode": "",
+    "balance": 730959,
+    "totalbet": 450,
+    "realbet": 450,
+    "basictotalbet": 10,
+    "buyFeatureMult": 45,
+    "maxWinLimit": 45370,
+    "ctrlid": 20712827
+  },
+  "gmi": {
+    "defaultScene": {
+    },
+    "replyPlay": {
+      "randomNumbers": [],
+      "results": [
+        {}
+      ],
+      "nextCommands": [],
+      "nextCommandParams": [],
+      "playerState": {
+        "public": {
+        },
+        "private": {
+        }
+      },
+      "finished": true,
+      "stake": null,
+      "nextCommand": "bg-selectfg",
+      "nextCommandParam": "lefty-bugsy-bugsy",
+      "selectCommandIndex": 0,
+      "playStartTime": 1757325896934
+    },
+    "playIndex": -2,
+    "bet": 1,
+    "lines": 450,
+    "totalwin": 1341,
+    "playwin": 0,
+    "maxWinLimit": 45370
+  }
+}

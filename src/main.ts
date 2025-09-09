@@ -1,6 +1,7 @@
 import { transformSceneData } from './utils';
 import { Connection } from './connection';
 import { EventEmitter } from './event-emitter';
+import * as fs from 'fs';
 import {
   ConnectionState,
   SlotcraftClientOptions,
@@ -19,7 +20,8 @@ type PendingRequest = {
 
 export class SlotcraftClient {
   private options: SlotcraftClientOptions;
-  private connection: Connection;
+  private connection!: Connection; // Can be uninitialized in replay mode
+  private isReplayMode = false;
   private state: ConnectionState = ConnectionState.IDLE;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private emitter = new EventEmitter();
@@ -55,7 +57,8 @@ export class SlotcraftClient {
    * Creates an instance of SlotcraftClient.
    *
    * @param options - Configuration options for the client.
-   * @param options.url - The WebSocket URL of the game server.
+   * @param options.url - The WebSocket URL of the game server. Required unless `replayUrl` is set.
+   * @param options.replayUrl - The URL of a JSON file for replay mode. If set, `url` is ignored.
    * @param options.token - Optional: The login token.
    * @param options.gamecode - Optional: The game code to enter.
    * @param options.businessid - Optional: The business ID for analytics and server-side logic. Defaults to `''`.
@@ -75,6 +78,13 @@ export class SlotcraftClient {
       ...options,
     };
 
+    // --- Mode Selection ---
+    if (options.replayUrl) {
+      this.isReplayMode = true;
+    } else if (!options.url) {
+      throw new Error('Either `url` for live mode or `replayUrl` for replay mode must be provided.');
+    }
+
     // Cache token, gamecode, and other context from constructor options
     this.userInfo.token = options.token;
     this.userInfo.gamecode = options.gamecode;
@@ -91,8 +101,10 @@ export class SlotcraftClient {
       this.logger = options.logger || console;
     }
 
-    this.connection = new Connection(this.options.url);
-    this.setupConnectionHandlers();
+    if (!this.isReplayMode) {
+      this.connection = new Connection(this.options.url!);
+      this.setupConnectionHandlers();
+    }
   }
 
   // --- Public API ---
@@ -130,6 +142,20 @@ export class SlotcraftClient {
         throw new Error('Token must be provided either in the constructor or to connect()');
       }
       this.userInfo.token = tokenToUse;
+
+      if (this.isReplayMode) {
+        this.logger.log('Connecting in replay mode...');
+        // Simulate the connection and login flow
+        this.setState(ConnectionState.CONNECTING);
+        // In replay mode, connection is instant
+        this.emitter.emit('connect');
+        this.setState(ConnectionState.CONNECTED);
+        this.setState(ConnectionState.LOGGING_IN);
+        // Simulate a successful login
+        this.setState(ConnectionState.LOGGED_IN);
+        this.logger.log('Replay mode connection successful.');
+        return;
+      }
 
       this.setState(ConnectionState.CONNECTING);
 
@@ -171,6 +197,14 @@ export class SlotcraftClient {
       }
       this.userInfo.gamecode = gamecodeToUse;
 
+      if (this.isReplayMode) {
+        this.logger.log(`Entering game in replay mode with gamecode: ${gamecodeToUse}`);
+        this.setState(ConnectionState.ENTERING_GAME);
+        await this._handleReplayData();
+        // The state will be set to IN_GAME, SPINEND, etc. inside _handleReplayData
+        return this.userInfo.lastGMI;
+      }
+
       // The client is now entering the game. The final state (IN_GAME, SPINEND, etc.)
       // will be determined by the cmdret handler for 'comeingame3', which processes
       // the server's response and handles any potential "resume" scenarios.
@@ -192,6 +226,32 @@ export class SlotcraftClient {
       if (this.state !== ConnectionState.IN_GAME) {
         throw new Error(`Cannot spin in state: ${this.state}`);
       }
+
+      if (this.isReplayMode) {
+        this.logger.log('Simulating spin in replay mode...');
+        this.setState(ConnectionState.SPINNING);
+
+        // In replay mode, the "result" is already known from the loaded JSON.
+        // We just need to transition to the correct state, mimicking the logic
+        // from the `gamectrl3` cmdret handler.
+        const gmi = this.userInfo.lastGMI;
+        const totalwin = this.userInfo.lastTotalWin ?? 0;
+        const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+        const needsCollect =
+          (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+
+        if (gmi?.replyPlay?.finished === false) {
+          this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+        } else if (needsCollect) {
+          this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+        } else {
+          this.setState(ConnectionState.IN_GAME);
+        }
+        this.logger.log(`Replay spin finished, state is now: ${this.state}`);
+        return { gmi, totalwin, results: resultsCount };
+      }
+
       const { gameid, ctrlid } = this.userInfo;
       if (!gameid) {
         throw new Error('gameid not available');
@@ -262,6 +322,16 @@ export class SlotcraftClient {
       if (this.state !== ConnectionState.SPINEND && this.state !== ConnectionState.IN_GAME) {
         throw new Error(`Cannot collect in state: ${this.state}`);
       }
+
+      if (this.isReplayMode) {
+        this.logger.log('Simulating collect in replay mode...');
+        this.setState(ConnectionState.COLLECTING);
+        // On successful collection, always return to the main IN_GAME state.
+        this.setState(ConnectionState.IN_GAME);
+        this.logger.log(`Replay collect finished, state is now: ${this.state}`);
+        return { isok: true }; // Return a success-like object
+      }
+
       const { gameid, lastResultsCount, lastPlayIndex } = this.userInfo;
       if (!gameid) {
         throw new Error('gameid not available');
@@ -307,6 +377,31 @@ export class SlotcraftClient {
       if (this.state !== ConnectionState.WAITTING_PLAYER) {
         throw new Error(`Cannot selectOptional in state: ${this.state}`);
       }
+
+      if (this.isReplayMode) {
+        this.logger.log(`Simulating selectOptional(${index}) in replay mode...`);
+        this.setState(ConnectionState.PLAYER_CHOICING);
+
+        // This logic is identical to the replay `spin()` method, as selecting an
+        // optional is effectively a turn that yields a final result. The result
+        // itself is already pre-loaded from the single replay JSON.
+        const gmi = this.userInfo.lastGMI;
+        const totalwin = this.userInfo.lastTotalWin ?? 0;
+        const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+        const needsCollect =
+          (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+
+        // In replay mode, we assume the choice leads directly to the final state.
+        if (needsCollect) {
+          this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+        } else {
+          this.setState(ConnectionState.IN_GAME);
+        }
+        this.logger.log(`Replay selectOptional finished, state is now: ${this.state}`);
+        return { gmi, totalwin, results: resultsCount };
+      }
+
       const { gameid, ctrlid, optionals, curSpinParams } = this.userInfo;
       if (!gameid) throw new Error('gameid not available');
       if (!ctrlid) throw new Error('ctrlid not available');
@@ -344,11 +439,13 @@ export class SlotcraftClient {
   // (spinUntilSpinEnd removed per request)
 
   public disconnect(): void {
-    this.stopHeartbeat();
-    this.clearReconnectTimer();
-    // Check if connection exists and is not already closing or closed
-    if (this.connection) {
-      this.connection.disconnect();
+    if (!this.isReplayMode) {
+      this.stopHeartbeat();
+      this.clearReconnectTimer();
+      // Check if connection exists and is not already closing or closed
+      if (this.connection) {
+        this.connection.disconnect();
+      }
     }
     // Update state immediately for responsiveness
     if (this.state !== ConnectionState.DISCONNECTED) {
@@ -360,6 +457,12 @@ export class SlotcraftClient {
   }
 
   public send(cmdid: string, params: any = {}): Promise<any> {
+    if (this.isReplayMode) {
+      // In replay mode, `send` should never be called. The methods that use it
+      // should be overridden to not call it. This is a safeguard.
+      return Promise.reject(new Error('`send` should not be called in replay mode.'));
+    }
+
     // P1: Restrict commands during LOGGING_IN state.
     if (this.state === ConnectionState.LOGGING_IN && cmdid !== 'flblogin') {
       return Promise.reject(new Error(`Only 'flblogin' is allowed during LOGGING_IN state.`));
@@ -907,6 +1010,70 @@ export class SlotcraftClient {
       if (op) {
         op.reject(new Error(reason));
       }
+    }
+  }
+
+  /**
+   * @private
+   * Fetches, parses, and processes the replay JSON file.
+   * This function is the core of the replay mode's simulation.
+   */
+  private async _handleReplayData(): Promise<void> {
+    if (!this.options.replayUrl) {
+      throw new Error('Replay mode requires a replayUrl.');
+    }
+    try {
+      let replayData: any;
+      const replayUrl = this.options.replayUrl;
+
+      if (replayUrl.startsWith('http://') || replayUrl.startsWith('https://')) {
+        this.logger.log(`Fetching replay data from URL: ${replayUrl}`);
+        const fetch = (globalThis as any).fetch || (await import('node-fetch')).default;
+        const response = await fetch(replayUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch replay file: ${response.statusText}`);
+        }
+        replayData = await response.json();
+      } else {
+        this.logger.log(`Reading replay data from local file: ${replayUrl}`);
+        const fileContent = fs.readFileSync(replayUrl, 'utf-8');
+        replayData = JSON.parse(fileContent);
+      }
+
+      this.logger.log('Replay data loaded and parsed successfully.');
+
+      // The replay JSON is expected to be a `gamemoduleinfo` message.
+      // We process it to populate all the necessary caches.
+      this.updateCaches(replayData);
+      this.emitter.emit('message', replayData); // Emit for listeners
+
+      // Now, we simulate the state transition that would normally happen
+      // after receiving a `comeingame3` response. This logic is mirrored
+      // from the `handleMessage` -> `cmdret` -> `comeingame3` case.
+      const gmi = this.userInfo.lastGMI;
+      const totalwin = this.userInfo.lastTotalWin ?? 0;
+      const resultsCount = this.userInfo.lastResultsCount ?? 0;
+
+      const needsCollect =
+        (totalwin > 0 && resultsCount >= 1) || (totalwin === 0 && resultsCount > 1);
+      const isPlayerChoice = gmi?.replyPlay?.finished === false;
+
+      if (isPlayerChoice || needsCollect) {
+        this.setState(ConnectionState.RESUMING);
+      }
+
+      if (isPlayerChoice) {
+        this.setState(ConnectionState.WAITTING_PLAYER, { gmi });
+      } else if (needsCollect) {
+        this.setState(ConnectionState.SPINEND, gmi ? { gmi } : undefined);
+      } else {
+        this.setState(ConnectionState.IN_GAME);
+      }
+      this.logger.log(`Replay mode state initialized to: ${this.state}`);
+    } catch (error) {
+      this.logger.error('Error in replay mode:', error);
+      this.disconnect(); // Disconnect on failure
+      throw error; // Re-throw to fail the enterGame promise
     }
   }
 }
