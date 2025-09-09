@@ -314,6 +314,17 @@
   - `jules/plan027.md`
   - `jules/plan027-report.md`
 
+### 2025-09-08: Refactor Replay Mode Logic (Plan 030)
+
+- **目标**: 重构回放（Replay）模式的逻辑，使其行为更贴近真实网络环境，并根据用户反馈进行微调。
+- **实施**:
+  - **拆分缓存逻辑**: `enterGame` 方法现在负责预先加载和缓存游戏配置类信息（如 `linesOptions`, `defaultScene`），确保这些信息在首次 `spin` 前可用。
+  - **聚焦 `spin` 方法**: `spin` 方法现在专注于处理单次旋转的结果，包括更新 `lastGMI`、`totalwin` 等，并根据结果将状态转换为 `SPINEND` 或 `WAITTING_PLAYER`。
+  - **更新测试**: 对应地调整了 `tests/replay.test.ts`，增加了对 `enterGame` 缓存配置能力的测试。
+- **产出**:
+  - `jules/plan030.md`
+  - `jules/plan030-report.md`
+
 ## 9. Utilities
 
 ### `transformSceneData(data)`
@@ -322,3 +333,49 @@
 - **Description**: A utility function designed to simplify the complex `defaultScene` object received from the server into a more usable format.
 - **Input**: Takes a raw scene data object, which typically has a structure like `{ values: [{ values: [1, 2] }, ...] }`.
 - **Output**: Returns a simple 2D array of numbers (e.g., `[[1, 2], ...]`). This flattened structure is easier to work with in the game logic. The function is robust and handles malformed or empty inputs by returning an empty array.
+
+## 10. Replay Mode
+
+For debugging and testing purposes, the `SlotcraftClient` can be initialized in a special "Replay Mode". This mode allows the client to simulate a full game session based on a static JSON file instead of connecting to a live WebSocket server.
+
+### How It Works
+
+- **Initialization**: To activate replay mode, provide an `http` or `https` URL to a valid replay JSON file in the `SlotcraftClient` constructor options.
+- **Data Loading**: When `client.connect()` is called, the client fetches the JSON file from the provided URL. It does not establish any WebSocket connection.
+- **Simulation**: Once the data is loaded, the client simulates the game flow. The methods behave in a way that mimics the live client flow.
+
+### Logic Flow (Replay Mode)
+
+- **`connect()`**: Fetches the entire replay JSON file and stores it in memory. It also simulates a successful connection and login, setting the client state to `LOGGED_IN`.
+- **`enterGame()`**: This method pre-caches game configuration data. It parses the replay file to populate values like `linesOptions` and `defaultScene` that are needed before a spin. It then transitions the client state to `IN_GAME`.
+- **`spin()`**: This is the primary action method in replay mode. When called, it processes the **result-specific** parts of the stored JSON data, updating caches like `lastGMI`, `totalwin`, and `lastResultsCount`. It then transitions the client to the appropriate final state (`SPINEND` for a win, `WAITTING_PLAYER` for a choice, or back to `IN_GAME` for a no-win scenario), mimicking a full spin cycle.
+
+### Use Case
+
+Replay mode is invaluable for:
+- **Reproducing Bugs**: A specific server response that causes a bug can be saved as a JSON file, allowing developers to consistently reproduce and debug the client-side issue without needing the server to be in a specific state.
+- **Integration Testing**: Writing client-side integration tests becomes much simpler, as there is no need to mock a complex WebSocket server.
+- **UI Prototyping**: Frontend developers can build and test UI components against a predictable game state without a running backend.
+
+### Example JSON Structure
+
+A valid replay file should contain a single `gamemoduleinfo` message, representing the complete state of a single spin result.
+
+```json
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "hoodlums",
+  "gameid": 61146,
+  "playCtrlParam": {
+    "balance": 730959,
+    "totalbet": 450
+  },
+  "gmi": {
+    "totalwin": 1341,
+    "replyPlay": {
+      "results": [{}, {}],
+      "finished": true
+    }
+  }
+}
+```

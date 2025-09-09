@@ -239,10 +239,10 @@ describe('SlotcraftClient Integration Tests', () => {
 
     it('should use lastPlayIndex + 1 as a fallback when collecting', async () => {
       // Manually set the state to be valid for collect
-      (client as any).setState(ConnectionState.SPINEND);
+      ((client as any).implementation as any).setState(ConnectionState.SPINEND);
       // Set lastPlayIndex, but ensure lastResultsCount is undefined to force the fallback
-      (client as any).userInfo.lastPlayIndex = 0;
-      (client as any).userInfo.lastResultsCount = undefined;
+      ((client as any).implementation as any).userInfo.lastPlayIndex = 0;
+      ((client as any).implementation as any).userInfo.lastResultsCount = undefined;
 
       const collectHandler = vi.fn((msg, ws) => {
         server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true });
@@ -428,7 +428,7 @@ describe('SlotcraftClient Integration Tests', () => {
       // HACK: For reasons that are unclear, the ctrlid is not being cached in this
       // specific test case, unlike in others. To unblock the test of the actual
       // resume logic, we manually set it here.
-      (client as any).userInfo.ctrlid = 789;
+      ((client as any).implementation as any).userInfo.ctrlid = 789;
 
       // 4. This call should now pass, because the core logic fix populates `curSpinParams`.
       await expect(client.selectOptional(0)).resolves.toBeDefined();
@@ -576,17 +576,17 @@ describe('SlotcraftClient Integration Tests', () => {
       const clientAny = client as any;
 
       // Manually set state to something that allows reconnecting
-      clientAny.state = ConnectionState.RECONNECTING;
+      clientAny.implementation.state = ConnectionState.RECONNECTING;
 
       // Call tryReconnect manually
-      clientAny.tryReconnect(); // attempt 1
-      expect(clientAny.reconnectAttempts).toBe(1);
+      clientAny.implementation.tryReconnect(); // attempt 1
+      expect(clientAny.implementation.reconnectAttempts).toBe(1);
 
-      clientAny.tryReconnect(); // attempt 2
-      expect(clientAny.reconnectAttempts).toBe(2);
+      clientAny.implementation.tryReconnect(); // attempt 2
+      expect(clientAny.implementation.reconnectAttempts).toBe(2);
 
       // This one should trigger the "give up" logic
-      clientAny.tryReconnect();
+      clientAny.implementation.tryReconnect();
       expect(logger.error).toHaveBeenCalledWith('Max reconnection attempts reached. Giving up.');
       expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
     });
@@ -598,8 +598,12 @@ describe('SlotcraftClient Integration Tests', () => {
       const clientAny = client as any;
 
       // Mock the send method to reject for 'keepalive'
-      const originalSend = client.send.bind(client);
-      vi.spyOn(client, 'send').mockImplementation(async (cmdid, params) => {
+      const implementation = (client as any).implementation;
+      // Set state to allow sending
+      (implementation as any).state = ConnectionState.LOGGED_IN;
+
+      const originalSend = implementation.send.bind(implementation);
+      vi.spyOn(implementation, 'send').mockImplementation(async (cmdid, params) => {
         if (cmdid === 'keepalive') {
           return Promise.reject(new Error('Fake heartbeat failure'));
         }
@@ -607,10 +611,10 @@ describe('SlotcraftClient Integration Tests', () => {
       });
 
       // Manually call startHeartbeat
-      clientAny.startHeartbeat();
+      implementation.startHeartbeat();
 
       // Manually trigger the interval
-      const intervalId = clientAny.heartbeatInterval;
+      const intervalId = clientAny.implementation.heartbeatInterval;
       expect(intervalId).toBeDefined();
       vi.advanceTimersByTimeAsync(30000);
 
@@ -644,16 +648,16 @@ describe('SlotcraftClient Integration Tests', () => {
     it('should reject collect() when index cannot be derived', async () => {
       await connectAndEnterGame();
       // Ensure no values are available to derive the index from
-      (client as any).userInfo.lastResultsCount = undefined;
-      (client as any).userInfo.lastPlayIndex = undefined;
+      ((client as any).implementation as any).userInfo.lastResultsCount = undefined;
+      ((client as any).implementation as any).userInfo.lastPlayIndex = undefined;
       // Manually set state to allow the call
-      (client as any).setState(ConnectionState.SPINEND);
+      ((client as any).implementation as any).setState(ConnectionState.SPINEND);
       await expect(client.collect()).rejects.toThrow('playIndex is not available');
     });
 
     it('should handle collect() failure and revert to SPINEND', async () => {
       await connectAndEnterGame();
-      (client as any).setState(ConnectionState.SPINEND); // Set state manually
+      ((client as any).implementation as any).setState(ConnectionState.SPINEND); // Set state manually
       server.on('collect', (msg, ws) => {
         server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: false });
       });

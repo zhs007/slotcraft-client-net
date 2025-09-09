@@ -6,6 +6,16 @@ import { SlotcraftClientOptions } from '../src/types';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('SlotcraftClient Advanced Tests', () => {
+  it('should throw an error for an invalid URL protocol', () => {
+    const options: SlotcraftClientOptions = {
+      url: 'ftp://invalid.protocol',
+      logger: null,
+    };
+    expect(() => new SlotcraftClient(options)).toThrow(
+      'Invalid URL protocol. Must be http(s) for replay or ws(s) for live.'
+    );
+  });
+
   let server: MockServer;
   let client: SlotcraftClient;
   let port: number;
@@ -149,5 +159,22 @@ describe('SlotcraftClient Advanced Tests', () => {
 
     // Verify the manual collect call had the correct index (3 - 1 = 2).
     expect(collectHandler.mock.calls[1][0].playIndex).toBe(2);
+  });
+
+  it('should delegate event emitter methods correctly', () => {
+    const implementation = (client as any).implementation;
+    const onSpy = vi.spyOn(implementation, 'on');
+    const offSpy = vi.spyOn(implementation, 'off');
+    const onceSpy = vi.spyOn(implementation, 'once');
+    const handler = () => {};
+
+    client.on('testOn', handler);
+    expect(onSpy).toHaveBeenCalledWith('testOn', handler);
+
+    client.off('testOff', handler);
+    expect(offSpy).toHaveBeenCalledWith('testOff', handler);
+
+    client.once('testOnce', handler);
+    expect(onceSpy).toHaveBeenCalledWith('testOnce', handler);
   });
 });

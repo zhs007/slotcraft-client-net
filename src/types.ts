@@ -83,6 +83,12 @@ export interface SlotcraftClientOptions {
   reconnectDelay?: number;
   /** Optional: Timeout for a single request in ms. Defaults to 10000. */
   requestTimeout?: number;
+  /**
+   * Optional: A custom fetch implementation.
+   * Used by Replay Mode in non-browser environments.
+   * If not provided, it will default to the global `fetch`.
+   */
+  fetch?: (url: string, init?: any) => Promise<any>;
   /** Optional: A custom logger. Set to `null` to disable logging. Defaults to `console`. */
   logger?: Logger | null;
 }
@@ -191,4 +197,24 @@ export interface SpinParams {
   ctrlname?: string; // default: 'spin'
   // Allow extra ctrlparam fields if needed
   [key: string]: any;
+}
+
+/**
+ * Defines the public interface for a Slotcraft client implementation.
+ * This allows for different implementations (e.g., live WebSocket vs. replay from JSON)
+ * to be used interchangeably.
+ */
+export interface ISlotcraftClientImpl {
+  getState(): ConnectionState;
+  getUserInfo(): Readonly<UserInfo>;
+  connect(token?: string): Promise<void>;
+  enterGame(gamecode?: string): Promise<any>;
+  spin(params: SpinParams): Promise<any>;
+  collect(playIndex?: number): Promise<any>;
+  selectOptional(index: number): Promise<any>;
+  disconnect(): void;
+  send(cmdid: string, params: any): Promise<any>;
+  on(event: string, callback: (...args: any[]) => void): void;
+  off(event: string, callback: (...args: any[]) => void): void;
+  once(event: string, callback: (...args: any[]) => void): void;
 }

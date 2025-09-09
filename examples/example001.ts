@@ -18,8 +18,9 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'ws';
+import fetch from 'node-fetch';
 import { SlotcraftClient } from '../src/main';
-import { ConnectionState, RawMessagePayload } from '../src/types';
+import { ConnectionState, RawMessagePayload, SlotcraftClientOptions } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.
 (global as any).WebSocket = WebSocket;
@@ -58,12 +59,20 @@ const main = async () => {
   // Clear the log file at the start.
   fs.writeFileSync(LOG_FILE, '--- WebSocket Communication Log ---\n\n');
 
-  const client = new SlotcraftClient({
+  const options: SlotcraftClientOptions = {
     url: WEBSOCKET_URL,
     token: TOKEN,
     gamecode: GAME_CODE,
     businessid: BUSINESSID || 'default',
-  });
+  };
+
+  // If the URL is for a replay file, inject the fetch implementation.
+  if (WEBSOCKET_URL.startsWith('http')) {
+    console.log('--- Replay Mode Detected ---');
+    options.fetch = fetch as any;
+  }
+
+  const client = new SlotcraftClient(options);
 
   // Setup logging
   client.on('raw_message', logRawMessage);
