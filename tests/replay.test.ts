@@ -288,5 +288,29 @@ describe('SlotcraftClient Replay Mode', () => {
       // Spin-result data should not be present yet
       expect(userInfo.lastGMI).toBeUndefined();
     });
+
+    it('should initialize clientParameter from replay file and allow updating it', async () => {
+      const selectReplayData = {
+        msgid: 'gamemoduleinfo',
+        playCtrlParam: { clientParameter: '[1,2,3]' },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(selectReplayData),
+      });
+
+      client = getClient({ url: 'http://a.b/c-select.json', gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+
+      // Verify it was initialized
+      let userInfo = client.getUserInfo();
+      expect(userInfo.clientParameter).toBe('[1,2,3]');
+
+      // Verify it can be updated by the method call
+      await client.selectSomething('[4,5,6]');
+      userInfo = client.getUserInfo();
+      expect(userInfo.clientParameter).toBe('[4,5,6]');
+    });
   });
 });

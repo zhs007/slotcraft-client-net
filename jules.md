@@ -325,6 +325,28 @@
   - `jules/plan030.md`
   - `jules/plan030-report.md`
 
+### 2025-09-09: Implement `selectSomething` Generic Action (Plan 032)
+
+- **目标**: 增加一个名为 `selectSomething(clientParameter: string)` 的新接口，用于向服务器发送一个通用的、可携带自定义字符串参数的 `selectany` 指令。
+- **实施**:
+  - **接口与类型**:
+    - 在 `ISlotcraftClientImpl` 中添加了 `selectSomething` 方法。
+    - 在 `UserInfo` 中增加了 `clientParameter` 字段，用于缓存该参数，默认为空字符串。
+  - **Live 客户端**:
+    - `selectSomething` 被实现为一个排队的用户操作，以保证指令的顺序执行。
+    - 该方法会发送一个 `gamectrl3` 指令，其中 `ctrlname` 为 `selectany`，`ctrlparam` 包含当前的 `bet`, `lines`, `times` 以及用户传入的 `clientParameter`。
+    - 在游戏恢复时（`enterGame`），`updateCaches` 方法现在可以从 `gamemoduleinfo.gmi.clientParameter` 中恢复并缓存该参数。
+  - **Replay 客户端**:
+    - `selectSomething` 被实现为一个简单的 mock 方法。
+    - 客户端现在可以在 `enterGame` 时从回放文件的 `playCtrlParam.clientParameter` 字段加载该参数。
+  - **测试**:
+    - 增加了集成测试，验证 Live 客户端能够正确发送 `selectany` 指令、缓存参数，并能在游戏恢复时正确加载参数。
+    - 增加了回放测试，使用一个包含 `clientParameter` 的新回放文件来验证 Replay 客户端的初始化逻辑。
+- **产出**:
+  - `jules/plan032.md`
+  - `jules/plan032-report.md`
+  - `tests/replay-select.json`
+
 ## 9. Utilities
 
 ### `transformSceneData(data)`

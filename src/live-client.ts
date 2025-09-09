@@ -72,6 +72,7 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
     this.userInfo.clienttype = options.clienttype ?? 'web';
     this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
     this.userInfo.language = options.language ?? 'en';
+    this.userInfo.clientParameter = '';
 
     if (options.logger === null) {
       // If logger is explicitly null, use a no-op logger
@@ -309,6 +310,42 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       const totalwin = this.userInfo.lastTotalWin ?? 0;
       const results = this.userInfo.lastResultsCount ?? 0;
       return { gmi, totalwin, results };
+    });
+  }
+
+  public selectSomething(clientParameter: string): Promise<any> {
+    return this._enqueueOperation(async () => {
+      if (this.state !== ConnectionState.IN_GAME) {
+        throw new Error(`Cannot selectSomething in state: ${this.state}`);
+      }
+      const { gameid, ctrlid, curSpinParams } = this.userInfo;
+      if (!gameid) throw new Error('gameid not available');
+      if (!ctrlid) throw new Error('ctrlid not available');
+
+      // Unlike spin, we don't need to guess defaults. We use the last known spin params.
+      const { bet, lines, times } = curSpinParams || {};
+      if (bet === undefined || lines === undefined || times === undefined) {
+        this.logger.warn('Spin parameters are not available for selectSomething. Sending without them.');
+      }
+
+      // Cache the new client parameter.
+      this.userInfo.clientParameter = clientParameter;
+
+      const ctrlparam = {
+        bet,
+        lines,
+        times,
+        clientParameter: clientParameter,
+      };
+
+      // We don't introduce a new state for this, as it's a simple command-response.
+      // The client remains in IN_GAME unless the response dictates otherwise (which is not expected).
+      return this.send('gamectrl3', {
+        gameid,
+        ctrlid,
+        ctrlname: 'selectany',
+        ctrlparam,
+      });
     });
   }
 
@@ -725,6 +762,11 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
         // Cache the default scene if it exists, transforming it into a 2D array.
         if (g.defaultScene) {
           this.userInfo.defaultScene = transformSceneData(g.defaultScene);
+        }
+
+        // Handle client parameter caching on resume
+        if (typeof g.clientParameter === 'string') {
+          this.userInfo.clientParameter = g.clientParameter;
         }
         break;
       }

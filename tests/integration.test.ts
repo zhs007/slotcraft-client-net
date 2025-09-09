@@ -734,4 +734,73 @@ describe('SlotcraftClient Integration Tests', () => {
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
   });
+
+  describe('selectSomething', () => {
+    beforeEach(async () => {
+      await connectAndEnterGame();
+    });
+
+    it('should send a "selectany" command and cache the parameter', async () => {
+      // Need to spin first to set the `curSpinParams` which are used in the command
+      server.on('gamectrl3', (msg, ws) => {
+        if (msg.ctrlname === 'spin') {
+          server.send(ws, { msgid: 'gamemoduleinfo', totalwin: 0 });
+          server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+        } else if (msg.ctrlname === 'selectany') {
+          // This is the one we are testing
+          expect(msg.ctrlparam.clientParameter).toBe('[3,1]');
+          expect(msg.ctrlparam.bet).toBe(1); // from the initial spin
+          expect(msg.ctrlparam.lines).toBe(20); // from the initial spin
+          server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+        }
+      });
+
+      await client.spin({ bet: 1, lines: 20 });
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+
+      const selectPromise = client.selectSomething('[3,1]');
+
+      // Wait for the operation to complete before checking the cache.
+      await expect(selectPromise).resolves.toBeDefined();
+
+      // Now check that the parameter is cached in userInfo
+      const userInfo = client.getUserInfo();
+      expect(userInfo.clientParameter).toBe('[3,1]');
+    });
+
+    it('should restore clientParameter on game resume', async () => {
+      // Disconnect and setup a new client to test the resume flow properly
+      client.disconnect();
+      server.stop();
+      server = new MockServer();
+      port = await server.start();
+      client = getClient();
+
+      server.on('flblogin', (msg, ws) => {
+        server.send(ws, { msgid: 'cmdret', cmdid: 'flblogin', isok: true });
+      });
+      // The server's response to comeingame includes the clientParameter
+      server.on('comeingame3', (msg, ws) => {
+        server.send(ws, {
+          msgid: 'gamemoduleinfo',
+          gmi: {
+            clientParameter: '[5,4,3,2,1]',
+            replyPlay: { finished: true }, // Ensure it enters IN_GAME
+          },
+        });
+        server.send(ws, { msgid: 'cmdret', cmdid: 'comeingame3', isok: true });
+      });
+
+      await client.connect(TEST_TOKEN);
+      await client.enterGame(TEST_GAME_CODE);
+
+      // Client should now be in game with the parameter cached
+      expect(client.getState()).toBe(ConnectionState.IN_GAME);
+      const userInfo = client.getUserInfo();
+      expect(userInfo.clientParameter).toBe('[5,4,3,2,1]');
+
+      // Clean up the locally created server for this test
+      server.stop();
+    });
+  });
 });

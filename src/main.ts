@@ -50,6 +50,10 @@ export class SlotcraftClient implements ISlotcraftClientImpl {
     return this.implementation.selectOptional(index);
   }
 
+  public selectSomething(clientParameter: string): Promise<any> {
+    return this.implementation.selectSomething(clientParameter);
+  }
+
   public disconnect(): void {
     this.implementation.disconnect();
   }
