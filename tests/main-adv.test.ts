@@ -6,6 +6,16 @@ import { SlotcraftClientOptions } from '../src/types';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('SlotcraftClient Advanced Tests', () => {
+  it('should throw an error for an invalid URL protocol', () => {
+    const options: SlotcraftClientOptions = {
+      url: 'ftp://invalid.protocol',
+      logger: null,
+    };
+    expect(() => new SlotcraftClient(options)).toThrow(
+      'Invalid URL protocol. Must be http(s) for replay or ws(s) for live.'
+    );
+  });
+
   let server: MockServer;
   let client: SlotcraftClient;
   let port: number;
