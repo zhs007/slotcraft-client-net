@@ -245,5 +245,55 @@ describe('SlotcraftClient Replay Mode', () => {
       await client.enterGame();
       expect(client.getState()).toBe(ConnectionState.IN_GAME);
     });
+
+    it('should correctly parse a full gamecfg object in the replay file', async () => {
+      const data = {
+        gamemoduleinfo: { msgid: 'gamemoduleinfo' },
+        gamecfg: {
+          msgid: 'gamecfg',
+          defaultLinebet: 5,
+          linebets: [1, 5, 10],
+          ver: '1.0',
+          coreVer: '1.1',
+          data: '{"25":{}, "50":{}}', // This will be used to derive linesOptions
+        },
+      };
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve(data) });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      expect(userInfo.defaultLinebet).toBe(5);
+      expect(userInfo.linebets).toEqual([1, 5, 10]);
+      expect(userInfo.gamecfgVer).toBe('1.0');
+      expect(userInfo.gamecfgCoreVer).toBe('1.1');
+      expect(userInfo.gamecfgData).toEqual({ '25': {}, '50': {} });
+    });
+
+    it('should handle invalid JSON in gamecfg.data', async () => {
+      const data = {
+        gamemoduleinfo: { msgid: 'gamemoduleinfo' },
+        gamecfg: { data: 'invalid-json' },
+      };
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve(data) });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      expect(userInfo.gamecfgData).toBeUndefined();
+    });
+
+    it('should derive linesOptions from gamecfg.data keys if bets array is missing', async () => {
+      const data = {
+        gamemoduleinfo: { msgid: 'gamemoduleinfo' },
+        gamecfg: { data: '{"100":{}, "200":{}}' },
+      };
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve(data) });
+      client = getClient({ gamecode: 'test' });
+      await client.connect();
+      await client.enterGame();
+      const userInfo = client.getUserInfo();
+      expect(userInfo.linesOptions).toEqual([100, 200]);
+    });
   });
 });

@@ -117,9 +117,24 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     this.setState(ConnectionState.ENTERING_GAME);
 
-    // Process the loaded gamemoduleinfo
-    this.updateCaches(this.replayData);
-    this.emitter.emit('message', this.replayData);
+    // Process the loaded replay data.
+    // It can be a single gamemoduleinfo object (old format)
+    // or a wrapper { gamemoduleinfo, gamecfg } (new format).
+    if (this.replayData.msgid === 'gamemoduleinfo') {
+      // Handle old format
+      this.updateCaches(this.replayData);
+      this.emitter.emit('message', this.replayData);
+    } else {
+      // Handle new format
+      if (this.replayData.gamemoduleinfo) {
+        this.updateCaches(this.replayData.gamemoduleinfo);
+        this.emitter.emit('message', this.replayData.gamemoduleinfo);
+      }
+      if (this.replayData.gamecfg) {
+        this._processGameCfg(this.replayData.gamecfg);
+        this.emitter.emit('message', this.replayData.gamecfg);
+      }
+    }
 
     const gmi = this.userInfo.lastGMI;
     const totalwin = this.userInfo.lastTotalWin ?? 0;
@@ -202,7 +217,6 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     this.emitter.emit('raw_message', payload);
   }
 
-  // A simplified version of the live client's updateCaches
   private updateCaches(msg: any): void {
     if (msg.msgid !== 'gamemoduleinfo') return;
 
@@ -210,17 +224,59 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     const g = msg.gmi || {};
     this.userInfo.lastGMI = g;
 
-    const playIndex = g.playIndex;
+    const playIndex =
+      typeof msg.playIndex === 'number'
+        ? msg.playIndex
+        : typeof g.playIndex === 'number'
+        ? g.playIndex
+        : undefined;
     if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
 
-    const totalwin = g.totalwin;
+    const totalwin =
+      typeof msg.totalwin === 'number'
+        ? msg.totalwin
+        : typeof g.totalwin === 'number'
+        ? g.totalwin
+        : undefined;
     if (typeof totalwin === 'number') this.userInfo.lastTotalWin = totalwin;
 
-    const resultsArr = g.replyPlay?.results;
-    if (Array.isArray(resultsArr)) this.userInfo.lastResultsCount = resultsArr.length;
+    const resultsArr = Array.isArray(g.replyPlay?.results)
+      ? g.replyPlay.results
+      : Array.isArray(msg.results)
+      ? msg.results
+      : undefined;
+    if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
 
     if (g.defaultScene) {
       this.userInfo.defaultScene = transformSceneData(g.defaultScene);
+    }
+  }
+
+  private _processGameCfg(msg: any): void {
+    if (typeof msg.defaultLinebet === 'number')
+      this.userInfo.defaultLinebet = msg.defaultLinebet;
+    if (Array.isArray(msg.linebets)) this.userInfo.linebets = msg.linebets;
+    if (typeof msg.ver === 'string') this.userInfo.gamecfgVer = msg.ver;
+    if (typeof msg.coreVer === 'string') this.userInfo.gamecfgCoreVer = msg.coreVer;
+    if (typeof msg.data === 'string') {
+      try {
+        this.userInfo.gamecfgData = JSON.parse(msg.data);
+        // If no explicit bets array for lines, derive from gamecfgData keys
+        if (!Array.isArray((msg as any).bets) && this.userInfo.gamecfgData) {
+          const keys = Object.keys(this.userInfo.gamecfgData)
+            .map((k) => Number(k))
+            .filter((n) => Number.isFinite(n));
+          if (keys.length) this.userInfo.linesOptions = keys.sort((a, b) => a - b);
+        }
+      } catch {
+        // keep as undefined if parse fails
+        this.userInfo.gamecfgData = undefined;
+      }
+    }
+    // If server provides bets array, prefer it as lines options
+    if (Array.isArray((msg as any).bets)) {
+      const betsArr = (msg as any).bets.filter((n: any) => typeof n === 'number');
+      if (betsArr.length) this.userInfo.linesOptions = [...betsArr].sort((a, b) => a - b);
     }
   }
 }
