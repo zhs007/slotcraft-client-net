@@ -28,6 +28,7 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     this.userInfo.clienttype = options.clienttype ?? 'web';
     this.userInfo.jurisdiction = options.jurisdiction ?? 'MT';
     this.userInfo.language = options.language ?? 'en';
+    this.userInfo.clientParameter = '';
 
     if (options.logger === null) {
       this.logger = { log: () => {}, warn: () => {}, error: () => {} };
@@ -183,6 +184,13 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     return Promise.resolve({ isok: true, cmdid: 'gamectrl3' });
   }
 
+  public async selectSomething(clientParameter: string): Promise<any> {
+    // In replay mode, we just log the action and cache the parameter.
+    this.logger.log(`[REPLAY] selectSomething called with: "${clientParameter}"`);
+    this.userInfo.clientParameter = clientParameter;
+    return Promise.resolve({ isok: true, cmdid: 'gamectrl3' });
+  }
+
   public disconnect(): void {
     if (this.state !== ConnectionState.DISCONNECTED) {
       this.setState(ConnectionState.DISCONNECTED);
@@ -228,6 +236,11 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
 
     if (typeof msg.playCtrlParam?.lines === 'number') {
       this.userInfo.linesOptions = [msg.playCtrlParam.lines];
+    }
+
+    // Also cache the client parameter from the replay file's control parameters.
+    if (typeof msg.playCtrlParam?.clientParameter === 'string') {
+      this.userInfo.clientParameter = msg.playCtrlParam.clientParameter;
     }
   }
 

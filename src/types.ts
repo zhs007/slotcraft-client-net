@@ -176,6 +176,8 @@ export interface UserInfo {
   curSpinParams?: SpinParams;
   // Scene data, simplified into a 2D array
   defaultScene?: number[][];
+  // A generic parameter that can be sent from client to server.
+  clientParameter?: string;
 }
 
 /**
@@ -212,6 +214,7 @@ export interface ISlotcraftClientImpl {
   spin(params: SpinParams): Promise<any>;
   collect(playIndex?: number): Promise<any>;
   selectOptional(index: number): Promise<any>;
+  selectSomething(clientParameter: string): Promise<any>;
   disconnect(): void;
   send(cmdid: string, params: any): Promise<any>;
   on(event: string, callback: (...args: any[]) => void): void;
