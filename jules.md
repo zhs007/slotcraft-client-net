@@ -322,3 +322,43 @@
 - **Description**: A utility function designed to simplify the complex `defaultScene` object received from the server into a more usable format.
 - **Input**: Takes a raw scene data object, which typically has a structure like `{ values: [{ values: [1, 2] }, ...] }`.
 - **Output**: Returns a simple 2D array of numbers (e.g., `[[1, 2], ...]`). This flattened structure is easier to work with in the game logic. The function is robust and handles malformed or empty inputs by returning an empty array.
+
+## 10. Replay Mode
+
+For debugging and testing purposes, the `SlotcraftClient` can be initialized in a special "Replay Mode". This mode allows the client to simulate a full game session based on a static JSON file instead of connecting to a live WebSocket server.
+
+### How It Works
+
+- **Initialization**: To activate replay mode, provide an `http` or `https` URL to a valid replay JSON file in the `SlotcraftClient` constructor options.
+- **Data Loading**: When `client.connect()` is called, the client fetches the JSON file from the provided URL. It does not establish any WebSocket connection.
+- **Simulation**: Once the data is loaded, the client simulates the game flow. Methods like `enterGame`, `spin`, and `collect` do not trigger network requests. Instead, they manipulate the client's internal state and return data based on the information in the JSON file, resolving their promises immediately.
+
+### Use Case
+
+Replay mode is invaluable for:
+- **Reproducing Bugs**: A specific server response that causes a bug can be saved as a JSON file, allowing developers to consistently reproduce and debug the client-side issue without needing the server to be in a specific state.
+- **Integration Testing**: Writing client-side integration tests becomes much simpler, as there is no need to mock a complex WebSocket server.
+- **UI Prototyping**: Frontend developers can build and test UI components against a predictable game state without a running backend.
+
+### Example JSON Structure
+
+A valid replay file should contain a single `gamemoduleinfo` message, representing the complete state of a single spin result.
+
+```json
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "hoodlums",
+  "gameid": 61146,
+  "playCtrlParam": {
+    "balance": 730959,
+    "totalbet": 450
+  },
+  "gmi": {
+    "totalwin": 1341,
+    "replyPlay": {
+      "results": [{}, {}],
+      "finished": true
+    }
+  }
+}
+```
